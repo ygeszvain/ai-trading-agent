@@ -37,6 +37,8 @@ After a milestone passes its acceptance checks, update `docs/build_status.md` an
 
 The website starts with persisted synthetic data in Prompt 2 (M1): Overview, Activity, Orders/fills and detail, Portfolio/instrument detail, and basic charts. Prompt 8 (M5) completes research, risk, learning, performance, operations, reports, live local updates, and all page/detail/export requirements. No broker connection is needed to build and inspect the website.
 
+The owner has requested a USD 1,000 observation pilot. Build-plan section 24 records the amount, unresolved operating limits, and the future authenticated pilot-approval flow. Requested capital and active trading authority are separate: checked-in live capital remains zero, and no funding or activation has occurred.
+
 ## Current authority and limits
 
 - Development uses fixtures, simulation, and paper mode.

@@ -7,6 +7,8 @@
 
 **Updated October 28, 2026:** Expanded the local trading website, activity detail, visualizations, read-model contracts, browser acceptance criteria, and Codex delivery sequence. See section 18 and the [Local Trading Website Specification](Local_Trading_Website_Spec.md).
 
+**Pilot request recorded October 28, 2026:** Randy wants to allocate USD 1,000 for the agent to operate and observe. Section 24 records this intended pilot allocation and the owner approval process. Runtime live authority and checked-in approved live capital remain inactive/zero pending implementation, verification, and account-bound activation.
+
 ## 1. Recommended decision
 
 Build a local research and trading system that uses LM Studio for language-model inference, a separately deployed application for continuous operation, and Robinhood's official external-agent MCP integration for brokerage access.
@@ -896,6 +898,8 @@ Provide readable desktop and narrow responsive layouts, accessible tables, keybo
 
 The initial financial configuration and approval queue are read-only. M5's existing pause/entry-cancel/protective controls remain distinct and capability-gated; paper controls affect simulated state only and shadow mode denies all broker mutations. Later live-readiness controls remain unavailable under LIVE_NOT_AUTHORIZED. Ordinary display preferences cannot alter trading authority.
 
+In M6/M7, implement an authenticated owner pilot-authorization form and review summary using section 24. Prefill the requested USD 1,000 ceiling as a draft, show every unresolved field and failed readiness gate, and bind approval to the selected account, strategy, limits, mode, and start/expiry. The form must not activate trading while prerequisites or owner choices remain unresolved; no such screen is implemented by this specification update.
+
 Exports preserve the selected scope, provenance, methods, and allowed source rights, redact sensitive identifiers, and defend against spreadsheet-formula execution. Render research/source text as untrusted content. A chat-like view, if later included, may answer read-only questions or draft proposals; financial actions still require the typed approval/risk path.
 
 ### Delivery and acceptance
@@ -1229,6 +1233,7 @@ Codex can begin M0 and M1 without these answers. Record unresolved values rather
 | Trading horizon | Daily decisions, multi-session holdings | Data, labels, costs, strategy |
 | Initial asset class | Liquid unleveraged ETFs, long-only | Universe and risk |
 | Approved live capital | Zero | Any live action |
+| Requested initial observation-pilot allocation | USD 1,000, owner-stated; draft allocation, not active dispatch authority | Future account-bound pilot approval |
 | Acceptable loss and drawdown | Paper examples only | Live authorization |
 | Broker eligibility and access | Unverified | Broker connection/live deployment |
 | Data provider and budget | Fixtures/imports; zero paid budget | Historical and forward datasets |
@@ -1238,6 +1243,34 @@ Codex can begin M0 and M1 without these answers. Record unresolved values rather
 | Authorization duration | No active live authorization | Autonomous activation |
 
 Do not block offline implementation to obtain these answers prematurely. Present a concrete configuration and evidence when a decision becomes necessary.
+
+### Requested USD 1,000 observation pilot and owner approval
+
+Randy has specified the intended initial pilot allocation: **USD 1,000**. Preserve that amount in the draft pilot package; do not ask him to restate it. The request does not identify a broker account, select the actual strategy/instruments, establish loss limits or duration, or activate an unbuilt application. Keep requested allocation separate from runtime-approved capital and from broker account funding.
+
+The intended workflow is:
+
+1. **Build and verify first.** Complete the applicable offline, accounting, risk, security, and read-only integration work. Add a separate USD 1,000 simulation/paper profile to evaluate small-account order feasibility and observation reports; retain the existing USD 100,000 engineering fixture default.
+2. **Owner-controlled Robinhood setup.** The owner completes official MCP authentication/onboarding to the dedicated account and controls any funding through Robinhood. Credentials stay outside Codex, chat, research prompts, and the browser bundle. Account connection, funding, and permission to place orders are distinct actions. [S1]
+3. **Inspect broker trade approvals.** Record the actual setting and availability. With broker approvals enabled, the owner reviews and manually places proposed trades in Robinhood. With approvals disabled, eligible orders may execute without that per-order confirmation, but some orders can still require it. The application cannot override a broker requirement. [S2]
+4. **Review the application pilot package.** In the future local website's owner controls, show the selected account alias, the USD 1,000 ceiling, approved strategy/version and instruments, order/position/exposure limits, loss/drawdown pause thresholds, allowed sessions/overnight policy, operating mode, monitoring/recovery responsibilities, and start/expiry. Show current readiness evidence and unresolved dependencies alongside the review.
+5. **Record scoped activation.** Only after the package is complete and the applicable gates pass may the authenticated owner approve the exact versioned package. Store its digest, owner identity, consent time, scope, and expiry. The executor revalidates it before every financial mutation. An account deposit, a chat message, a checkbox, or a single environment flag cannot replace this record.
+6. **Operate and observe.** M6 starts with supervised verification. If the owner later selects bounded autonomous operation, M7 uses one explicit, expiring operating envelope instead of routine per-intent application approvals, while preserving every broker-required approval. Display decisions, orders/fills, costs, P&L, exposure, blocked actions, and expiry in the local website. The model cannot renew or widen its authority.
+
+| Pilot field | Current status |
+| --- | --- |
+| Requested initial allocation / maximum proposed live capital | USD 1,000; owner supplied |
+| Active runtime-approved live capital | USD 0; LIVE_NOT_AUTHORIZED |
+| Dedicated account alias and broker eligibility | Unverified; owner-controlled setup pending |
+| Strategy/version and exact permitted instruments | Pending review; retain the plan's initial long-only, unleveraged ETF scope |
+| Actual order sizes, position/exposure limits, and loss/drawdown triggers | Pending owner approval; paper examples are not approved live limits |
+| Per-intent versus bounded autonomous mode, dates, expiry, and overnight policy | Pending final scoped activation |
+| Fractional-share/order-type/minimum-size compatibility | Must be verified through official capabilities for a USD 1,000 account; do not silently change order type or risk limits to force a trade |
+| Funding, additional deposits, or capital increases | Owner-operated only; no automatic top-ups or authority expansion |
+
+Money remains in the owner's dedicated Robinhood account. A requested allocation is not an instruction to fund an account from the development environment. The entire funded amount can be lost; pause thresholds are control triggers and do not guarantee a maximum loss or an executable exit. Pausing/expiry blocks new exposure according to policy and must not be represented as confirmed cancellation or liquidation.
+
+Codex should deliver the draft approval flow, disabled readiness code, mocked tests, and an owner-run activation procedure in the existing milestones. This budget record does not bypass the build sequence or its verification gates.
 
 ## 25. First runnable slice and definition of done
 

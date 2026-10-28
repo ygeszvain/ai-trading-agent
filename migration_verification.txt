@@ -1,32 +1,26 @@
-Trading agent — handoff and local website specification verification
+Trading agent — pilot-budget specification and handoff verification
 Date: 2026-10-28
-Scope: specification revision and packaging; no application implementation.
+Scope: record a requested USD 1,000 observation pilot and planned owner approval.
 
-PASS: Original plan and prompt pack are retained byte-for-byte in Git commit fa4f8e402494674459f3b104a26a15cf743b97e1.
-PASS: Original and current hashes/sizes match SOURCE_MANIFEST.json.
-PASS: All 12 numbered prompts retain Consequences / Boundaries.
-PASS: Existing boundaries are unchanged for prompts other than expanded Prompt 8.
-PASS: Current Prompt 1 matches CODEX_START.md exactly and stops after M0.
-PASS: All 19 original section 23 boundary bullets remain in AGENTS.md.
-PASS: All 10 website pages match between the build plan and website specification.
-PASS: 13 local Markdown links resolve.
-PASS: 18 protected plan sections are unchanged, including official Robinhood MCP/execution, risk policy, accounting objective, local inference, financial defaults, and authority boundaries.
-PASS: AGENTS.md remains below the documented default 32 KiB instruction budget.
+PASS: Requested pilot allocation is USD 1,000; active runtime live capital is zero.
+PASS: LIVE_NOT_AUTHORIZED and all section 22 defaults/section 23 boundaries remain unchanged.
+PASS: 25 plan sections outside the owner-approval additions match the previous revision.
+PASS: All 12 implementation prompts and the kickoff remain unchanged; next task is Prompt 1 (M0).
+PASS: Current/original document hashes and source provenance are valid.
+PASS: 13 local document links resolve.
 
-Packaging checks are performed after this log is written:
+Packaging checks performed after this log is written:
 - git diff --check and staged whitespace check.
-- SHA-256 checksums of every current handoff file.
-- Clean committed working tree and no configured remote.
-- ZIP CRC, exact archived bytes, extracted Git history/fsck, and checksum verification.
+- All payload SHA-256 checksums.
+- Clean committed working tree; no remote configured.
+- ZIP CRC, exact payload bytes, extracted Git fsck/history, and checksums.
 
-Reproduce handoff integrity from the extracted repository:
+Reproduce integrity checks from the extracted repository:
   sha256sum -c CHECKSUMS.sha256
   git status --short
-  git log -2 --oneline
+  git log -3 --oneline
   git remote -v
 
-Website/application/browser tests: NOT RUN; implementation is pending.
-UI screenshots and update/render performance: NOT MEASURED.
-Integration/operations: UNVERIFIED; no account connected.
-Investment evidence: NONE.
-Financial authority: LIVE_NOT_AUTHORIZED.
+Application/browser tests and UI timing: NOT RUN; application is unbuilt.
+Account connection, funding, broker-setting changes, and live activation: NOT PERFORMED.
+Current financial authority: LIVE_NOT_AUTHORIZED.

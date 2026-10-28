@@ -2,7 +2,7 @@
   "format": "trading-agent-codex-handoff-v2",
   "migration_date": "2026-10-28",
   "revision_date": "2026-10-28",
-  "revision": "Local trading website, complete activity detail, visualizations, and browser acceptance requirements",
+  "revision": "Local trading website plus owner-requested USD 1,000 observation pilot and future scoped approval flow",
   "application_code_included": false,
   "full_conversation_history_included": false,
   "next_task": "Prompt 1 (M0 only)",
@@ -17,8 +17,8 @@
         "sha256": "0655fd23a1cd67dfe2692a75ff168f8ce8ca5eb2be55dcaffbb02907f14177ce"
       },
       "current": {
-        "size_bytes": 93585,
-        "sha256": "9315d198fe749cccfab5c6fc7d3509ffb8257042b6a0da354379c3c02b661180"
+        "size_bytes": 98997,
+        "sha256": "c61b60208a4aca8465875f4ac8f655969011dc83d640d2f5eecb485bc9f98ba5"
       },
       "modified_since_recovery": true
     },
@@ -40,8 +40,13 @@
   "added_specifications": [
     {
       "path": "docs/Local_Trading_Website_Spec.md",
-      "size_bytes": 21877,
-      "sha256": "92d5da42827ffa503b439bc982b77e733dc93ab1a60b3575ac57732fc820522c"
+      "size_bytes": 22380,
+      "sha256": "0983fdcb7eba3e6dcd849232f5d1df70512995014e6ffe7eef985cfa08ba436b"
     }
-  ]
+  ],
+  "requested_pilot": {
+    "requested_capital_ceiling_usd": "1000.00",
+    "active_runtime_capital_usd": "0.00",
+    "status": "REQUEST_RECORDED_ACTIVATION_PENDING"
+  }
 }

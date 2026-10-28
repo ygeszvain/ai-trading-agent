@@ -3,6 +3,7 @@
 Recorded: 2026-10-28
 Current financial authority: **LIVE_NOT_AUTHORIZED**
 Approved live capital: **0 USD**
+Owner-requested observation-pilot allocation: **1,000 USD; activation pending**
 Next task: **Prompt 1 — M0**
 
 ## Verified state
@@ -18,6 +19,8 @@ Requested: a local website to see all trading activity and details. The expanded
 This is a specification change only. Website implementation, browser screenshots, actual UI performance, and all application acceptance checks remain pending. No financial, account-connection, or hosting authority changed.
 
 ## Milestone ledger
+
+The USD 1,000 request is now recorded in build-plan section 24 and the future website's owner-approval requirements. It sets the intended pilot budget; it does not complete any milestone, select an account, transfer funds, or create active trading authority. The next build task remains Prompt 1.
 
 | Prompt | Scope | Status |
 | --- | --- | --- |

@@ -135,6 +135,7 @@ The requested visualization website is read-only first. Preserve the plan's exis
 - Any later owner command requires server authentication, CSRF protection, explicit scope and confirmation, execution-side authorization/risk validation, and an auditable result. A stale page cannot bypass current state.
 - Pausing is distinct from cancellation, confirmed cancellation, liquidation, and revoking broker authorization. The UI describes what happened and what remains exposed.
 - Financial configuration is read-only in the initial website. Ordinary theme/timezone/table preferences cannot change account, capital, risk limits, strategy, broker permissions, or live mode.
+- M6/M7 owner controls must include the plan section 24 pilot-authorization review, prefilled with the owner's requested USD 1,000 ceiling as an inactive draft. Bind consent to the exact account, strategy/instruments, mode, risk limits, and start/expiry; unresolved fields or failed readiness gates block activation. Display requested versus active capital separately, preserve broker approval requirements, and audit activation/expiry/revocation. The initial M1/M5 website does not activate this flow.
 - Keep session state and credentials out of URL/query strings, browser storage used for preferences, telemetry, exports, and errors. Do not render source/model text as trusted HTML.
 - Export the approved scope only, redact sensitive identifiers, enforce source rights, bound resource use, and prevent spreadsheet-formula execution when exporting CSV text. Exporting must not modify trading state.
 

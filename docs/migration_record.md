@@ -52,4 +52,6 @@ Live capital stays zero and authority remains LIVE_NOT_AUTHORIZED. No applicatio
 
 ## Remaining handoff
 
+The subsequent USD 1,000 pilot request is recorded in build-plan section 24, the website's future M6/M7 approval form, README, and build status. It preserves all financial defaults and the build sequence. Account, actual operating limits, mode/dates, broker compatibility, and owner activation remain unresolved; no money moved and no runtime was enabled.
+
 Extract the archive, open the dedicated project folder in Codex, and use `CODEX_START.md`. The archive does not move the original ChatGPT chat history, select a remote repository, install Codex, or start a Codex task on the owner's device.
