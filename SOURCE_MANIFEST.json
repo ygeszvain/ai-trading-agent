@@ -1,6 +1,8 @@
 {
-  "format": "trading-agent-codex-handoff-v1",
+  "format": "trading-agent-codex-handoff-v2",
   "migration_date": "2026-10-28",
+  "revision_date": "2026-10-28",
+  "revision": "Local trading website, complete activity detail, visualizations, and browser acceptance requirements",
   "application_code_included": false,
   "full_conversation_history_included": false,
   "next_task": "Prompt 1 (M0 only)",
@@ -9,16 +11,37 @@
     {
       "original_title": "Robinhood_Local_AI_Trading_Build_Plan.md",
       "path": "docs/Robinhood_Local_AI_Trading_Build_Plan.md",
-      "size_bytes": 79756,
-      "sha256": "0655fd23a1cd67dfe2692a75ff168f8ce8ca5eb2be55dcaffbb02907f14177ce",
-      "copied_verbatim": true
+      "original": {
+        "git_revision": "fa4f8e402494674459f3b104a26a15cf743b97e1",
+        "size_bytes": 79756,
+        "sha256": "0655fd23a1cd67dfe2692a75ff168f8ce8ca5eb2be55dcaffbb02907f14177ce"
+      },
+      "current": {
+        "size_bytes": 93585,
+        "sha256": "9315d198fe749cccfab5c6fc7d3509ffb8257042b6a0da354379c3c02b661180"
+      },
+      "modified_since_recovery": true
     },
     {
       "original_title": "Trading_Agent_Codex_Prompts.txt",
       "path": "docs/Trading_Agent_Codex_Prompts.txt",
-      "size_bytes": 36851,
-      "sha256": "4ceefa0418656d2d257c8e17b0dbaa1315a4e4bafa065a0b9c0f67a5ec445983",
-      "copied_verbatim": true
+      "original": {
+        "git_revision": "fa4f8e402494674459f3b104a26a15cf743b97e1",
+        "size_bytes": 36851,
+        "sha256": "4ceefa0418656d2d257c8e17b0dbaa1315a4e4bafa065a0b9c0f67a5ec445983"
+      },
+      "current": {
+        "size_bytes": 43950,
+        "sha256": "383b743563c8985ca9a9bd66fad0fdf6cc42079bc41118f4d22f5b7a3000d5a2"
+      },
+      "modified_since_recovery": true
+    }
+  ],
+  "added_specifications": [
+    {
+      "path": "docs/Local_Trading_Website_Spec.md",
+      "size_bytes": 21877,
+      "sha256": "92d5da42827ffa503b439bc982b77e733dc93ab1a60b3575ac57732fc820522c"
     }
   ]
 }

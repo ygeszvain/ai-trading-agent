@@ -1,13 +1,15 @@
 # Codex starting task
 
-Run this one task in the extracted repository. Read AGENTS.md and docs/build_status.md first. The numbered prompt pack is the current task sequence; the older plan section 26 does not expand this task to M1.
+Run this one task in the extracted repository. Read AGENTS.md and docs/build_status.md first. Read docs/Local_Trading_Website_Spec.md for the requested local website and its staged delivery. The numbered prompt pack is the current task sequence; the older plan section 26 does not expand this task to M1.
 
-## Original Prompt 1
+## Current Prompt 1
 
 ```text
 PROMPT 1 — ESTABLISH THE REPOSITORY AND NONNEGOTIABLE BOUNDARIES
 
 Read docs/Robinhood_Local_AI_Trading_Build_Plan.md and every applicable AGENTS.md.
+Read docs/Local_Trading_Website_Spec.md for the required local website and its
+M0/M1/M5 delivery split. Plan the UI now; do not claim it is implemented in M0.
 Implement M0 only. Inspect the working tree and preserve existing work. If the
 plan is missing, identify that missing prerequisite; do not reconstruct it from
 memory. Continue safe environment inspection that does not depend on the file.
@@ -30,6 +32,10 @@ Implement
 - Create docs/architecture.md, docs/capability_matrix.md,
   docs/decision_log.md, and docs/build_status.md. Record actual facts separately
   from assumptions and capabilities that still need owner-run verification.
+- Document website routes, local startup/auth, account/mode/run scoping,
+  persisted read-model/event contracts, page-to-backend dependencies, and the
+  M1 core-page versus M5 full-website backlog. Preserve the FastAPI/minimal-JS
+  design unless an established stack or measured need justifies a change.
 - Create blank-secret configuration examples. Defaults:
   TRADING_MODE=simulation; LIVE_TRADING_ENABLED=false;
   approved live capital=0; LLM_ALLOW_CLOUD_FALLBACK=false;

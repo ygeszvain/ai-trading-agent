@@ -1,6 +1,9 @@
 CODEX PROMPT PACK — ROBINHOOD + LOCAL LM STUDIO
 Prepared October 27, 2026
 
+Updated October 28, 2026: local trading website scope, early simulation UI,
+full activity/order details, visualizations, and browser acceptance checks.
+
 Purpose: Build the product described in Robinhood_Local_AI_Trading_Build_Plan.md through small, reviewable milestones. This pack authorizes software development and offline verification only. It does not authorize account linking, live trading, account funding, broker-setting changes, or paid services.
 
 HOW TO USE
@@ -23,7 +26,7 @@ BUILD SEQUENCE
 5 — Permitted data and point-in-time storage (M3)
 6 — Honest strategy and economic evaluation (M3)
 7 — Official Robinhood gateway, with writes disabled (M4)
-8 — Dashboard, scheduling, monitoring, and forward paper mode (M5)
+8 — Full local trading website, scheduling, monitoring, and forward paper mode (M5)
 9 — Bounded learning in research (M8 research components brought forward)
 10 — Security, fault simulation, and readiness review
 11 — Supervised-live readiness code; activation disabled (M6)
@@ -44,6 +47,8 @@ Never infer that one track passing establishes the others.
 PROMPT 1 — ESTABLISH THE REPOSITORY AND NONNEGOTIABLE BOUNDARIES
 
 Read docs/Robinhood_Local_AI_Trading_Build_Plan.md and every applicable AGENTS.md.
+Read docs/Local_Trading_Website_Spec.md for the required local website and its
+M0/M1/M5 delivery split. Plan the UI now; do not claim it is implemented in M0.
 Implement M0 only. Inspect the working tree and preserve existing work. If the
 plan is missing, identify that missing prerequisite; do not reconstruct it from
 memory. Continue safe environment inspection that does not depend on the file.
@@ -66,6 +71,10 @@ Implement
 - Create docs/architecture.md, docs/capability_matrix.md,
   docs/decision_log.md, and docs/build_status.md. Record actual facts separately
   from assumptions and capabilities that still need owner-run verification.
+- Document website routes, local startup/auth, account/mode/run scoping,
+  persisted read-model/event contracts, page-to-backend dependencies, and the
+  M1 core-page versus M5 full-website backlog. Preserve the FastAPI/minimal-JS
+  design unless an established stack or measured need justifies a change.
 - Create blank-secret configuration examples. Defaults:
   TRADING_MODE=simulation; LIVE_TRADING_ENABLED=false;
   approved live capital=0; LLM_ALLOW_CLOUD_FALLBACK=false;
@@ -118,11 +127,26 @@ Implement
   journal, cash/inventory reconciliation, and a CLI report.
 - A documented offline demo using simulated USD 100,000 and unmistakable
   SIMULATION labels. Use honest return/cost conventions.
+- Build the first local website slice from section 18 and
+  docs/Local_Trading_Website_Spec.md: Overview, Activity, Orders/fills with full
+  order detail, and Portfolio/instrument detail. Include basic equity/price
+  charts and time-aligned decision/order/fill markers using available fixtures.
+- Serve locally with owner authentication, locally bundled assets, and scoped
+  read APIs backed by the persisted ledger/audit state. Do not hardcode cards
+  or create a second financial ledger. Keep runtime fixture browsing offline.
+- Preserve exact backend amounts, mode/run/account filters, correlation links,
+  and truthful empty/stale/UNKNOWN states. Read interactions cannot invoke
+  model inference or any broker operation. No live order controls are enabled.
 
 Acceptance criteria
 One documented command sequence starts the demo from a clean checkout and
 produces intents, risk decisions, simulated orders/fills, positions, P&L, and
-benchmarks. Restarting the demo does not duplicate economic effects. Tests cover
+benchmarks. The documented startup opens an authenticated local website; an
+owner can trace a fixture decision through risk, multiple fills, ledger,
+positions, and charts without logs. Browser values match backend records and
+read interactions cause zero mutations/model calls. Capture representative
+synthetic-data screenshots and actual browser checks. Restarting the demo does
+not duplicate economic effects. Tests cover
 cash/inventory conservation, basic limits, HOLD, malformed inputs, and rejection
 of attempted live activation.
 
@@ -205,6 +229,10 @@ Implement
 - A fixed fixture benchmark for extraction accuracy, citation fidelity,
   abstention, injection resistance, and latency. Keep mocks and actual local
   model measurements distinct.
+- Persist sanitized research records, failures, model metadata, and evidence
+  references under the website's scoped read contract. Mark missing local-model
+  observations pending; do not expose prompts containing secrets or hidden
+  reasoning in the browser.
 
 Acceptance criteria
 The adapter returns valid evidence-backed output or explicit failure/abstention.
@@ -248,6 +276,8 @@ Implement
 - Restrict outbound fetching to approved destinations. Treat fetched content as
   data and defend against redirects to local/private targets.
 - An ablation interface for later text/news/macro feeds.
+- Persist source coverage/freshness/quality summaries for the website without
+  adding browser-to-provider requests or disclosing source credentials.
 
 Acceptance criteria
 Tests prevent future-dated observations and revised data from entering earlier
@@ -295,6 +325,10 @@ Implement
   delayed data, missing data, gaps, and removal of the best short subperiod.
 - A cost/capital break-even view using labeled assumptions rather than promised
   returns. Report both absolute and benchmark-relative performance.
+- Store report series, costs, scope, benchmark methods, sample sizes, trial
+  history, and limitations for the website's Performance and Learning pages.
+  Later UI values must reproduce these backend artifacts rather than recompute
+  authoritative returns in browser JavaScript.
 
 Acceptance criteria
 A reproducible report can recommend CONTINUE_RESEARCH, PAPER_TEST, or REJECT.
@@ -334,6 +368,9 @@ Implement
   A tool name or read-only annotation alone is not sufficient classification.
 - Bind to one approved account alias. Filter other accounts and account numbers
   before downstream research, logs, reports, and fixtures.
+- Publish sanitized snapshot/status/reconciliation records for the website's
+  existing scoped read model. UI refresh must not call the broker directly or
+  change broker polling cadence; credentials never reach the browser.
 - Timestamped quotes, positions, balances, open orders, fill/status history,
   reconciliation, and explicit unsupported/missing capabilities.
 - Document actual broker approval behavior as a runtime verification item.
@@ -356,51 +393,96 @@ are uncertain, fail closed, document them, and keep simulation working. Stop at
 gateway code and owner-run handoff.
 
 
-PROMPT 8 — BUILD OPERATIONS AND FORWARD PAPER MODE
+PROMPT 8 — BUILD THE LOCAL TRADING WEBSITE, OPERATIONS, AND FORWARD PAPER MODE
 
-Follow AGENTS.md, the build plan, and docs/build_status.md. Implement M5 runtime
-and operator controls. Use the gateway only as permitted by the configured mode.
+Follow AGENTS.md, the build plan, docs/Local_Trading_Website_Spec.md, and
+docs/build_status.md. Implement M5 runtime, the complete local trading website,
+and mode-permitted operator controls. Preserve the working M1 website.
 
 Objective
-Run the application independently of Codex and observe future paper decisions
-with clear exposure, health, costs, and operational controls.
+Run independently of Codex and let the owner inspect all permitted activity:
+what happened, why, the exact order/fill/ledger details, current exposure,
+results, and operational issues. Use persisted simulation/paper state first.
 
 Implement
 - Durable scheduled jobs, bounded retries, single-job/account concurrency,
   session/holiday awareness, time synchronization checks, and restart recovery.
-- Store canonical UTC timestamps. Default owner-facing displays to
-  America/Chicago; use an explicit exchange calendar/timezone for trading.
-- A loopback/private authenticated dashboard with CSRF/session protection for
-  state changes, and an equivalent minimal CLI where useful.
-- Display mode, simulated/live capital, cash, holdings, pending exposure, orders,
-  realized/unrealized P&L, strategy/product costs, benchmarks, source freshness,
-  reconciliation age, model health, incidents, and authorization expiry.
-- Distinct controls for pausing new risk, requesting entry cancellations, and
-  separately authorized reductions; never equate pause with liquidation.
+- Canonical UTC storage and the configured owner display timezone, with explicit
+  exchange time and tested date filters. Preserve the plan's existing defaults.
+- Complete every required website page: Overview; Activity; Orders/fills and
+  full order detail; Portfolio/instrument detail; Performance; Research and
+  decisions; Risk and approvals; Learning; Operations; Reports and preferences.
+- Stay with the plan's FastAPI/templates/minimal-JavaScript design unless the
+  established stack or measured requirements justify a documented change.
+  Provide loopback-only local startup, owner authentication, locally bundled
+  chart/assets, protected reads/streams/exports, and session/CSRF/Host/Origin
+  checks. Do not require runtime CDNs or a public service.
+- A durable scoped activity feed and validated filters for account alias,
+  mode/run, time, instrument, strategy, event/status, and severity. Include
+  HOLD, rejected, expired, partially filled, canceled, UNKNOWN, corrected,
+  external/manual, research, job, incident, and promotion events with provenance.
+- Trace evidence/decision through risk, approval if applicable, intent,
+  submission attempts, orders, individual fills, ledger effects, positions,
+  reconciliation, and matured outcomes. Preserve many-to-many relationships,
+  sanitized IDs, origin, versions, and the distinction between cancellation
+  request/confirmation and unresolved submission.
+- Equity/benchmark, drawdown, exposure/allocation, cost/performance attribution,
+  and instrument price/volume charts with linked decision/order/fill markers.
+  Use only available permitted data; label unavailable bars and aggregation.
+  Provide accessible tables, tooltips, range navigation, and precise totals.
+- Backend-authoritative Decimal/integer amounts and consistent read snapshots.
+  Separate realized/unrealized P&L, income, deposits, fees, and product costs.
+  Do not blend modes, count deposits as profit, or double-subtract costs.
+- Read models derived from durable ledger/audit records, atomic state/outbox
+  writes, stable watermarks/cursors, bounded payloads, idempotent projections,
+  authenticated event updates, and bounded read-API polling fallback. Resume,
+  deduplicate, detect gaps, and resynchronize without falsely fresh state.
+  UI refresh reads local state; it does not poll the broker or invoke models.
+- Show quote age, source age, last successful ingest/reconciliation, connection
+  and model health, authorization expiry, queue lag, incidents, and pending
+  external validation. Retain stored history during LLM/broker outages.
+- Responsive/keyboard-accessible loading, empty, error, stale, disconnected,
+  and partial-data views. Scoped CSV/JSON/session exports must redact secrets,
+  preserve methodology/source rights, and prevent CSV formula execution.
+- Preserve distinct controls for pause, entry-cancel requests, and separately
+  authorized reductions. Commands use separate authenticated/CSRF-protected
+  routes and current server/execution-side gates. Paper commands affect only
+  simulated state; shadow mode denies all broker mutations. Financial settings
+  and the initial approval queue are read-only; live controls remain unavailable.
 - An independent watchdog: model/research failure cannot disable reconciliation
   or previously authorized protective monitoring.
-- Paper mode uses current permitted data and internal simulated execution only.
-  Shadow mode additionally compares read-only broker state when independently
-  authorized and configured; all broker mutations remain denied.
-- Freeze the prospective strategy/model/configuration and register the start
-  timestamp before observations. Retain every decision, including HOLD.
+- Paper uses current permitted data and internal simulated execution. Shadow
+  compares read-only broker state only when independently authorized/configured.
+  Credentials never reach the browser, Codex, or research model.
+- Freeze the prospective strategy/model/configuration and register its start
+  before observations. Retain every decision, including HOLD and adverse events.
 - Local dashboard/file alerts first. Define notifier interfaces and delivery
   checks without sending external messages or provisioning accounts.
 
 Acceptance criteria
-An offline accelerated session demonstrates startup, decisions, watchdog,
-incident handling, paper fills, reconciliation, reports, and restart.
-Produce an owner-run forward observation procedure and daily/session evidence
-reports. At least 30 trading sessions is an operational observation target,
-not proof of profitability. Low-frequency strategies may need much longer.
-Do not simulate elapsed sessions and claim the real observation period passed.
+A clean checkout has documented offline demo and local website startup commands.
+An accelerated persisted fixture session exercises startup, all required pages,
+decisions, partial/late/corrected fills, UNKNOWN and cancel races, watchdog,
+incidents, reports/exports, reconciliation, outage/reconnect, and restart.
+Browser values agree with backend ledger/reports. Reads/filtering/charts/replay/
+exports cause zero broker mutations and zero model calls. Mode/account scope,
+privacy/security, responsiveness, keyboard access, and the website specification's
+material failure scenarios pass; capture and inspect synthetic-data screenshots.
+Measure and report the proposed local update/render targets against the stated
+fixture load and hardware. Hardcoded financial cards or placeholder pages do
+not satisfy completion; unavailable external data remains explicitly pending.
+Produce owner-run forward observation instructions and daily/session reports.
+At least 30 actual trading sessions is an operational observation target, not
+proof of profitability. Do not count accelerated sessions as elapsed market time.
 
 Consequences / Boundaries
-Keep live trading disabled and capital authorization zero. No broker mutations,
-public hosting, external messages, paid feeds, production deployment, or changes
-to host startup settings without scope. Use fixtures if feeds are unavailable
-and label all delayed/simulated data. Preserve adverse history and record
-uncertainty. Stop with runnable operations and pending prospective checks.
+Keep LIVE_NOT_AUTHORIZED, live trading disabled, and approved capital zero.
+No broker mutations, account linking, credentials, public hosting/tunnels,
+external messages, paid feeds, cloud inference, production deployment, push,
+merge, or host startup/settings changes are authorized. Use fixtures when feeds
+are unavailable and label simulated/delayed/stale data. Preserve existing risk,
+accounting, authority, and adverse history. Stop with the runnable local website
+and operations, actual check results, and honest pending prospective validation.
 
 
 PROMPT 9 — IMPLEMENT CONTROLLED SELF-LEARNING IN RESEARCH
@@ -470,6 +552,12 @@ Review and verify
 - Independent stop/pause controls and clear limitations when disconnected.
 - Training/evaluation leakage, survivorship gaps, dividend accounting,
   cost double counting, hidden trials, and false readiness/performance claims.
+- Local website/read-model boundaries: authentication, session/CSRF/Host/Origin
+  controls, mode/account isolation, escaped untrusted evidence, safe/redacted
+  exports, consistent financial snapshots, stream gap/reconnect handling,
+  stale/missing values, and proof that browser reads cannot invoke broker
+  mutations or model inference. Exercise the website's material failure paths
+  from docs/Local_Trading_Website_Spec.md with persisted synthetic data.
 
 Acceptance criteria
 Reuse existing adequate checks. Add tests only for meaningful uncovered risk
@@ -516,6 +604,9 @@ Implement
   monitoring, pilot observation, and recovery. No invented owner decisions.
 - Owner-run startup, reconciliation, explicit resume, shutdown, and official
   broker-revocation instructions. Keep actual activation out of setup/demo tasks.
+- Show exact intent, risk/evidence bindings, expiry, unmet prerequisites, and
+  the approval audit trail in the local website. Actual live controls remain
+  unavailable; UI state cannot bypass current server/execution-side checks.
 
 Acceptance criteria
 Missing, stale, mismatched, or unapproved prerequisites deny dispatch.
@@ -559,6 +650,9 @@ Implement
   capital, tools, and assets remain outside that class.
 - Adversarial simulations showing attempted authority expansion, hidden memory
   changes, permission drift, and expired authorization are denied.
+- Expose the frozen champion, current envelope/expiry, denied state changes,
+  health, and promotion/rollback history in the website with sanitized data.
+  Website refresh/preferences cannot renew or widen authorization.
 
 Acceptance criteria
 An offline multi-session simulation operates without per-intent application

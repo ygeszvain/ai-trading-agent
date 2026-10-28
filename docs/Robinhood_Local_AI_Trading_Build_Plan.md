@@ -5,6 +5,8 @@
 **Initial deployment:** One owner, one local installation, one dedicated trading account.  
 **Initial authorization:** Build and test software using fixtures and simulated money. Live trading remains disabled.
 
+**Updated October 28, 2026:** Expanded the local trading website, activity detail, visualizations, read-model contracts, browser acceptance criteria, and Codex delivery sequence. See section 18 and the [Local Trading Website Specification](Local_Trading_Website_Spec.md).
+
 ## 1. Recommended decision
 
 Build a local research and trading system that uses LM Studio for language-model inference, a separately deployed application for continuous operation, and Robinhood's official external-agent MCP integration for brokerage access.
@@ -48,7 +50,7 @@ The owner can supervise a locally running system that gathers permitted informat
 
 ### Version one includes
 
-- A single-owner local dashboard and command-line interface.
+- A single-owner local trading website and command-line interface. The website exposes the full permitted activity history, order/fill drill-down, portfolio and instrument charts, performance, research, risk, learning, and operational state described in section 18.
 - A local LM Studio connection with no automatic cloud-model fallback.
 - Historical replay and forward paper trading using an internal simulator.
 - A broker gateway that can later connect to Robinhood through official authentication.
@@ -165,7 +167,7 @@ Separate processes are the minimum implementation boundary. Use separate operati
 | Model access | HTTP adapter to LM Studio | Keeps the application independent of a model vendor |
 | Broker access | Supported MCP client library behind a Robinhood adapter | Authentication and schema-driven integration |
 | Orchestration | Explicit state machines and persistent jobs | Bounded behavior and recoverable workflows |
-| Dashboard | FastAPI templates with minimal browser JavaScript | Fast single-owner delivery |
+| Local website | FastAPI templates with minimal browser JavaScript, locally bundled charts/assets, scoped read API, and authenticated event updates | Detailed single-owner visualization without a separate public service |
 | Packaging | Local services; Docker Compose for infrastructure where useful | Simple deployment without orchestration overhead |
 | Quality | pytest, property tests for invariants, type checks, linting | Meaningful coverage of money and failure paths |
 | Telemetry | Structured redacted logs, metrics, trace IDs | Diagnosis and auditability |
@@ -199,6 +201,7 @@ docs/
   evaluation_protocol.md
   operator_runbook.md
   decision_log.md
+  Local_Trading_Website_Spec.md
 src/trading_agent/
   config/
   contracts/
@@ -220,6 +223,11 @@ src/trading_agent/
   audit/
   monitoring/
   api/
+    read_models/
+  web/
+    routes/
+    templates/
+    static/
   cli/
 tests/
   unit/
@@ -243,6 +251,7 @@ Define interfaces before implementing provider-specific behavior:
 - **ExperimentRunner:** immutable dataset manifest, configuration, splits, candidate versions, and metrics.
 - **PromotionPolicy:** permitted change class, evidence checks, authorization, activation, and rollback.
 - **Notifier:** operational alerts with delivery status and no trading authority.
+- **TradingReadModel:** scoped account/mode/run snapshots, activity search, linked decisions/orders/fills, chart series, performance, and health with provenance, freshness, and a consistent event watermark. It reads persisted application state and cannot submit orders or invoke model inference.
 
 Internal interface names are application design choices. They are not claims about exact Robinhood endpoint or argument names.
 
@@ -770,6 +779,8 @@ Use migrations and enforce uniqueness and foreign-key relationships.
 | experiments | Hypotheses, every trial, splits, dataset and artifact manifests |
 | promotions | Evidence, authorization class, activated version, rollback |
 | incidents | Trigger, exposure, response, acknowledgment, resolution |
+| activity_events / outbox | Stable event ID/cursor, origin, mode/run/account scope, event and observed timestamps, correlation references, sanitized payload, and correction linkage; commit consequential state and its event atomically |
+| dashboard_projections | Rebuildable read views and projection watermarks derived from the ledger/audit records; never a second authoritative money ledger |
 
 Store timestamps in UTC and retain source timezones. Use America/New_York for exchange-calendar logic and America/Chicago as the default owner display timezone, editable without changing the underlying timestamps.
 
@@ -822,28 +833,88 @@ After a crash or restored backup, reconcile before allowing new exposure. Initia
 
 Automatic health recovery may restart processes. It may not silently reenable expired authority, reset a drawdown high-water mark, or convert paper mode into live mode.
 
-## 18. Dashboard and owner experience
+## 18. Local trading website and owner experience
 
-Keep the interface focused on decisions and control.
+Build an actual locally served website so the owner can inspect all permitted trading activity and its details without reading implementation logs. It must explain what happened, why, its effect on cash/positions/results, unresolved state, and the required owner action.
 
-1. **Overview:** Mode, account alias, allocated capital, cash, positions, orders, exposure, P&L, benchmark comparison, data age, broker connection, and latest successful reconciliation.
-2. **Research:** Candidate, evidence links, verified facts, inferred thesis, conflicting information, and why the system traded or abstained.
-3. **Approval queue:** Exact intent details, worst permitted exposure, costs, price constraints, expiry, and authorization status.
-4. **Learning:** Champion, challengers, trial history, results, uncertainty, promotion status, and rollback.
-5. **Operations:** Pause controls, outstanding broker orders, incidents, health, alert delivery, and recovery checklist.
-6. **Settings:** Approved account, universe, capital, risk policy, inference profile, sources, spend limits, and authorization duration.
+The detailed page/data/acceptance contract is the [Local Trading Website Specification](Local_Trading_Website_Spec.md). This section is the core product requirement; the detailed specification supplies implementation and verification detail.
 
-Display simulated and live results with unmistakable mode labels. Always show realized and unrealized P&L separately and identify delayed data.
+### Local delivery and authority
 
-A chat-like interface may answer read-only questions or draft a proposal. It must route any financial action to the same typed approval and risk path. Do not let natural-language chat become a second execution channel.
+Extend the existing FastAPI application with templates, minimal JavaScript, a scoped read API, and locally bundled chart/style/font assets. Proposed default address: http://127.0.0.1:8000/ with a configurable port. Bind to loopback and authenticate the owner. The application and website run independently of an open Codex session.
 
-Do not require an owner to read implementation logs to understand current exposure. Show what happened, why it mattered, and the required action.
+The browser accesses the application only. Backend services handle official Robinhood MCP discovery/account filtering, persistence, local inference, risk, and execution under their existing boundaries. No broker credentials, raw account numbers, direct MCP connection, privileged executor socket, or unrestricted database tools reach the browser.
+
+Reading, refreshing, filtering, chart navigation, replay, and exports cannot mutate broker state or trigger LLM calls. The website starts read-only. Existing operator controls use separately protected command routes and the same execution-side checks; visibility or disabled buttons never grant or enforce financial authority.
+
+### Required pages
+
+| Page | Required information |
+| --- | --- |
+| Overview | Mode/account/strategy, equity, available and reserved cash, holdings, pending exposure, working orders, realized/unrealized P&L, strategy/product costs, benchmark and drawdown charts, recent activity, health and reconciliation age |
+| Activity | Searchable, filterable, durable timeline of decisions and HOLD/ABSTAIN, risk rejections, approvals/expiry, order attempts/statuses, fills/corrections, cancellations, reconciliation, manual/external activity, account flows, corporate actions, jobs/model failures, incidents, and promotions |
+| Orders and fills | Filterable tables and lifecycle drill-down with side, quantities, prices, fees, timestamps, origin, current and historical statuses, individual fills, reservations, and reconciliation |
+| Portfolio and instruments | Current/historical positions, cash ledger, cost basis/available lots, marks and mark age, value, exposure, realized/unrealized P&L, price/volume charts, and linked decision/order/fill markers |
+| Performance | Equity and drawdown curves, gross/net P&L, cash-flow-adjusted returns, appropriate benchmarks, costs, exposure/turnover, period/instrument/strategy attribution, and trade statistics with methods and sample size |
+| Research and decisions | Source evidence, verified facts versus inference, concise rationale, conflicts, availability cutoff, model/prompt/strategy versions, uncertainty, HOLD/rejection reasons, and matured versus pending outcomes |
+| Risk and approvals | Limits and utilization, pending capacity, loss/drawdown triggers, blockers, exact intent/approval details, expiry, authorization scope, and unmet readiness prerequisites |
+| Learning | Champion/challengers, every trial including failures, datasets/splits, costs, uncertainty, matured labels, promotion history, permitted change class, and rollback |
+| Operations | Gateway/model/data/job health, last successful updates/reconciliation, queue lag, clock health, incidents, alert delivery, redacted diagnostics, recovery checklist, and mode-permitted operational controls |
+| Reports and preferences | Scoped CSV/JSON/session exports, methodology, timezone/theme/table preferences, and read-only summaries of account/universe/capital/risk/model/source/authorization configuration |
+
+"All activity" means all retained and permitted records within the approved account, selected mode/run, and displayed coverage interval. Show active filters, counts, missing coverage, and pagination. Do not silently exclude losses, rejections, HOLD decisions, external activity, corrections, or incomplete orders.
+
+### Full order and decision drill-down
+
+Link each decision through evidence and snapshot, risk evaluation, any approval, intent, submission attempts, broker order, individual fills, ledger effects, reconciliation, and measured outcome. Include application-generated IDs, sanitized broker references, origin, versions, timestamps, intended versus actual quantity/price, before/after cash and exposure, costs, and unresolved errors.
+
+Support multiple orders per decision and multiple fills per order. A cancellation request is not confirmation, a canceled order may retain fills, and a timeout remains UNKNOWN until reconciled. Externally initiated activity must be visible without falsely attributing it to the strategy. Define round-trip/closed-lot grouping before displaying win rates or per-trade results.
+
+### Visualization and accounting accuracy
+
+Provide equity versus benchmark, drawdown, exposure/allocation, cost and performance attribution, instrument price/candlestick/volume charts where data rights and coverage permit, and time-aligned decision/order/fill markers. Use a line chart or an explicit unavailable state when the required OHLC data is absent.
+
+Every chart identifies mode, source, units/currency, period, timezone, price adjustment/mark basis, and aggregation. Preserve gaps and stale intervals. Zoom, tooltips, filters, linked rows, and exports must refer to the same underlying records; downsampling cannot alter accounting totals or hide execution events.
+
+Backend ledger/performance services compute authoritative Decimal/integer amounts. Serialize exact values as strings or scaled integers; browser chart coordinates are display approximations only. Separate realized/unrealized P&L, income, external flows, fees, and product operating costs. Deposits are not profits; never double-subtract spread/slippage already embedded in fills.
+
+Simulation, paper, shadow, and actual live results must not be blended. Use persistent text mode labels and distinct scoped sections/series. Mark estimates, stale/missing values, corrections, and reconciliation differences; unavailable is not zero. Related totals use a consistent snapshot or visibly disclose differing as-of times.
+
+### Updates, filtering, and resilience
+
+Read from rebuildable projections of the existing durable ledger/audit events. Consequential state and its outbox event commit atomically. Include account/mode/run scope, as-of time, provenance, quality flags, and a consistent watermark in read responses.
+
+Provide authenticated server-sent events or an equivalent supported stream, with bounded read-API polling as fallback. Bootstrap from a consistent snapshot, resume by cursor, deduplicate reconnects, detect gaps, and resynchronize explicitly. UI refreshes read local state and do not increase broker polling or invoke models. Bound queues, pagination, chart payloads, and export resource use.
+
+Initial local targets are p95 committed-event-to-visible-update latency of at most 2 seconds, a configurable 5-second polling fallback, and an overview render target under 3 seconds once services are ready with 10,000 fixture events and 1,000 historical orders. These are proposed targets, not measured claims; record hardware and actual results.
+
+Stream heartbeat, last data observation, quote age, and last successful reconciliation remain separate timestamps. A healthy website connection cannot make stale financial data appear fresh or override risk freshness limits. Persist UTC, preserve the configured owner display timezone, and test date filters across daylight-saving changes.
+
+### Usability and controls
+
+Provide readable desktop and narrow responsive layouts, accessible tables, keyboard navigation, visible focus, and labels beyond color. Loading, empty, disconnected, stale, error, and partial-data states must be useful. Stored history remains available during model/broker outages. A narrow layout does not authorize remote or phone access to another host's loopback server.
+
+The initial financial configuration and approval queue are read-only. M5's existing pause/entry-cancel/protective controls remain distinct and capability-gated; paper controls affect simulated state only and shadow mode denies all broker mutations. Later live-readiness controls remain unavailable under LIVE_NOT_AUTHORIZED. Ordinary display preferences cannot alter trading authority.
+
+Exports preserve the selected scope, provenance, methods, and allowed source rights, redact sensitive identifiers, and defend against spreadsheet-formula execution. Render research/source text as untrusted content. A chat-like view, if later included, may answer read-only questions or draft proposals; financial actions still require the typed approval/risk path.
+
+### Delivery and acceptance
+
+- **M0 / Prompt 1:** Document website routes, local startup/auth, shared read contracts, trust boundaries, and a concrete page-to-backend backlog. No UI completion is claimed.
+- **M1 / Prompt 2:** Deliver a runnable fixture-backed website with Overview, Activity, Orders/fills and full order detail, Portfolio/instrument detail, and basic equity/price charts with decision/order/fill markers. It must use persisted application data.
+- **M2–M4:** Persist the research, evaluation, and sanitized gateway data needed by the remaining pages. Unavailable capabilities remain labeled honestly.
+- **M5 / Prompt 8:** Complete all required pages, event updates/reconnect behavior, filters, exports, responsive/accessibility states, incident/recovery views, and permitted paper controls. This does not require or authorize a live account connection.
+- **Prompt 10:** Verify browser/read-model security, state consistency, staleness, adverse outcomes, and attempted authority bypasses. Later prompts only add their separately scoped disabled readiness machinery.
+
+Acceptance requires navigating a known fixture decision through orders, partial fills, corrections, ledger, position and P&L; finding HOLD/rejected/UNKNOWN/cancel-race cases; reconciling displayed values to backend reports; checking mode/account isolation and exports; reconnecting/restarting without duplicates; and proving read interactions cause zero broker mutations and zero model calls. Capture synthetic-data screenshots and actual browser results for layout and usability review. These UI checks are separate from authenticated broker observations and prospective investment evidence.
 
 ## 19. Security, privacy, and product boundaries
 
 - Use official OAuth/MCP flows and a secret store appropriate to the host.
 - Keep broker tokens outside model prompts, source control, generated reports, crash traces, and the coding environment.
 - Authenticate the dashboard; bind locally or use an owner-approved private network.
+- Keep the website loopback-only by default, with protected read APIs/streams/exports, Host/Origin validation, session protection, escaped untrusted text, and CSRF protection on command routes. No public hosting or tunnels are authorized by the website revision.
+- Browser bundles, URL state, exports, telemetry, and errors must not contain broker credentials or raw account numbers. Enforce approved account/mode scope on the server; chart refresh must not invoke broker mutations or model calls.
 - Enable supported LM Studio API authentication. Validate its compatibility with the chosen client.
 - Request the least broker permission available. If the broker provides broader read scope, minimize downstream disclosure locally.
 - Treat all retrieved pages, filings, PDFs, social posts, and tool descriptions as untrusted input.
@@ -906,11 +977,24 @@ Financial execution warrants meaningful tests. Favor invariants and failure simu
 - Alert failure is itself visible.
 - An owner can identify current exposure and outstanding orders without logs.
 
+### Local website and read-model tests
+
+- Trace a persisted fixture decision through risk, multiple fills, ledger changes, portfolio, and chart/table/export views; reconcile all amounts against backend services.
+- Show HOLD, rejected, expired, cancel-requested/cancel-confirmed, partial/late fills, UNKNOWN, corrections, external activity, missing data, and empty states truthfully.
+- Enforce mode/run/account isolation on every read route, detail link, stream, chart, and export; never count deposits as profits or blend simulated and live results.
+- Reconnect streams with duplicate/out-of-order notifications or expired cursors; detect gaps and resynchronize without duplicate economic effects or falsely fresh data.
+- Verify authentication, Host/Origin/session/CSRF protection, escaped evidence text, redaction, safe CSV exports, and no direct browser/executor or browser/MCP privilege path.
+- Prove page reads, refresh, sorting/filtering, chart navigation, history replay, and export cause zero broker mutations and zero LLM calls.
+- Verify keyboard use, desktop/narrow layouts, chart text labels, pagination, date/timezone/DST filters, stale/disconnected/partial-data states, and measured local performance targets.
+- Inspect representative synthetic-data screenshots and report actual browser checks. Do not mark a placeholder page or hardcoded financial card complete.
+
 Each milestone produces a concise test report, known limitations, and reproducible commands. Do not use a live order to prove a unit test or use successful paper fills as proof of real execution quality.
 
 ## 21. Implementation milestones for Codex
 
 Effort estimates below are planning assumptions for one experienced engineer assisted by Codex. They exclude procurement, access delays, and the time needed to demonstrate a trading edge. A functional research/paper product may take roughly 6–10 engineering weeks; credible forward evidence may take substantially longer.
+
+The expanded website scope must be included in the M0 backlog and re-estimate. The earlier effort ranges have not been revalidated against an implementation or target hardware.
 
 ### M0 Environment and feasibility
 
@@ -918,7 +1002,7 @@ Effort estimates below are planning assumptions for one experienced engineer ass
 
 **Requirements:** Inspect the target repository, applicable AGENTS.md, runtime, available hardware, installed Codex/LM Studio versions, model availability, and current official documentation. Make a decision log and capability checklist. Use read-only inspection and public documentation; do not authenticate to a financial account.
 
-**Acceptance criteria:** Architecture, repository plan, dependency strategy, local-inference test procedure, unknowns, and milestone backlog are concrete and reviewable. Paper mode is the documented default.
+**Acceptance criteria:** Architecture, repository plan, dependency strategy, local-inference test procedure, unknowns, and milestone backlog are concrete and reviewable. Include the local website page map, scoped read contracts, startup/auth approach, and M1/M5 delivery split. Paper mode is the documented default.
 
 **Consequences / Boundaries:** No account linking, credentials, paid feeds, hardware purchases, model downloads, production changes, or live actions. Preserve unrelated files.
 
@@ -928,9 +1012,9 @@ Effort estimates below are planning assumptions for one experienced engineer ass
 
 **Description:** Deliver the first working end-to-end slice.
 
-**Requirements:** Configuration validation, typed contracts, database migrations, deterministic numerical strategy, synthetic replay, risk checks, reservations, order state machine, fill accounting, journal, minimal dashboard, and reports.
+**Requirements:** Configuration validation, typed contracts, database migrations, deterministic numerical strategy, synthetic replay, risk checks, reservations, order state machine, fill accounting, journal, reports, and the first local website slice in section 18. Overview, Activity, Orders/fills with full order detail, Portfolio/instrument detail, and basic charts must read persisted fixture state through scoped read contracts.
 
-**Acceptance criteria:** A clean checkout can run a documented offline demo. The demo produces decisions, simulated orders, a portfolio ledger, and a benchmark report. Cash, inventory, duplicate-event, limit, restart, and unknown-order tests pass. Live submissions are structurally unavailable.
+**Acceptance criteria:** A clean checkout can run a documented offline demo and open its authenticated local website. The demo produces decisions, simulated orders, a portfolio ledger, and a benchmark report. The owner can inspect order/fill history and related portfolio/chart details; displayed amounts match backend records. Cash, inventory, duplicate-event, limit, restart, unknown-order, and relevant browser checks pass. Live submissions are structurally unavailable.
 
 **Consequences / Boundaries:** Fixtures only; no broker secrets or calls. Do not implement a fake success response in a live adapter.
 
@@ -972,13 +1056,13 @@ Effort estimates below are planning assumptions for one experienced engineer ass
 
 **Estimate:** Several days to 1 engineering week, subject to access and API behavior.
 
-### M5 Forward paper validation and operations
+### M5 Local trading website, forward paper validation, and operations
 
 **Description:** Test the full workflow on newly arriving information.
 
-**Requirements:** Frozen strategy, real-time or correctly labeled delayed data, internal simulated execution, daily reconciliation, incident drills, cost attribution, and owner dashboard.
+**Requirements:** Frozen strategy, real-time or correctly labeled delayed data, internal simulated execution, daily reconciliation, incident drills, cost attribution, and all local website pages/data/detail/visualization requirements in section 18 and the detailed website specification. Include durable activity, consistent read models, authenticated updates and exports, failure states, and permitted paper controls.
 
-**Acceptance criteria:** At least 30 trading sessions for operational observation, zero unresolved critical execution-control defects, and a prospective performance report. Extend observation when the number of independent decisions is inadequate.
+**Acceptance criteria:** The runnable website passes browser workflows, financial consistency, scope isolation, reconnect/staleness, security, and measured local-performance checks using persisted fixtures/paper data. Prospective operational validation separately requires at least 30 trading sessions, zero unresolved critical execution-control defects, and a prospective performance report. Keep that observation PENDING until actually completed; extend it when independent decisions are inadequate.
 
 **Consequences / Boundaries:** This period does not automatically authorize live trading. No optimizing against the final test sample or resetting poor history.
 
@@ -1166,7 +1250,7 @@ The first build should demonstrate:
 5. Reserve capacity and simulate an order/fill lifecycle.
 6. Reconcile cash and inventory.
 7. Persist an auditable decision and ledger.
-8. Display the result and benchmark comparison.
+8. Open the local website to inspect Overview, Activity, Orders/fills and order detail, Portfolio/instrument detail, and basic price/equity charts; displayed amounts and benchmark results match persisted backend records.
 9. Restart without duplicating orders.
 10. Reject every attempted transition to live execution.
 

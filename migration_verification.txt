@@ -1,32 +1,32 @@
-Trading agent — migration verification
+Trading agent — handoff and local website specification verification
 Date: 2026-10-28
-Scope: document/context handoff; application implementation is pending.
+Scope: specification revision and packaging; no application implementation.
 
-PASS: 2 original documents copied byte-for-byte; sizes and SHA-256 match.
-PASS: Prompt 1 extracted verbatim into CODEX_START.md.
-PASS: All 19 section 23 boundary bullets preserved in AGENTS.md.
-PASS: All 12 numbered prompts present; each has Consequences / Boundaries.
-PASS: All local Markdown links resolve.
-PASS: AGENTS.md is below the documented default 32 KiB instruction budget.
-PASS: No symlinks in handoff files.
+PASS: Original plan and prompt pack are retained byte-for-byte in Git commit fa4f8e402494674459f3b104a26a15cf743b97e1.
+PASS: Original and current hashes/sizes match SOURCE_MANIFEST.json.
+PASS: All 12 numbered prompts retain Consequences / Boundaries.
+PASS: Existing boundaries are unchanged for prompts other than expanded Prompt 8.
+PASS: Current Prompt 1 matches CODEX_START.md exactly and stops after M0.
+PASS: All 19 original section 23 boundary bullets remain in AGENTS.md.
+PASS: All 10 website pages match between the build plan and website specification.
+PASS: 13 local Markdown links resolve.
+PASS: 18 protected plan sections are unchanged, including official Robinhood MCP/execution, risk policy, accounting objective, local inference, financial defaults, and authority boundaries.
+PASS: AGENTS.md remains below the documented default 32 KiB instruction budget.
 
-Final packaging checks are performed after this log is written:
-- SHA-256 verification of every handoff file in CHECKSUMS.sha256.
-- Git whitespace check on authored files before the migration commit.
-  The initial full check flagged preserved source Markdown whitespace;
-  original sources are excluded from normalization and from this check.
-- Clean working tree and no remote repository configured after commit.
-- ZIP CRC integrity and exact equality of all archived file bytes.
-- Extracted archive opens as the same clean Git repository and commit.
+Packaging checks are performed after this log is written:
+- git diff --check and staged whitespace check.
+- SHA-256 checksums of every current handoff file.
+- Clean committed working tree and no configured remote.
+- ZIP CRC, exact archived bytes, extracted Git history/fsck, and checksum verification.
 
-Reproduce integrity checks from the extracted repository:
+Reproduce handoff integrity from the extracted repository:
   sha256sum -c CHECKSUMS.sha256
-  git diff --check HEAD~0 -- . ':(exclude)docs/Robinhood_Local_AI_Trading_Build_Plan.md' ':(exclude)docs/Trading_Agent_Codex_Prompts.txt'
   git status --short
-  git log -1 --oneline
+  git log -2 --oneline
   git remote -v
 
-Application tests: NOT RUN; application implementation is pending Prompt 1.
-Integration/operations: UNVERIFIED.
+Website/application/browser tests: NOT RUN; implementation is pending.
+UI screenshots and update/render performance: NOT MEASURED.
+Integration/operations: UNVERIFIED; no account connected.
 Investment evidence: NONE.
 Financial authority: LIVE_NOT_AUTHORIZED.

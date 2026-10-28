@@ -10,6 +10,7 @@ The current starting task is Prompt 1 (M0) only. This repository is a context mi
 
 - Read applicable AGENTS.md files and inspect the working tree before editing. Preserve user work and any more specific applicable instructions.
 - Read docs/Robinhood_Local_AI_Trading_Build_Plan.md in full for requirements, and docs/Trading_Agent_Codex_Prompts.txt for the selected numbered task.
+- Read docs/Local_Trading_Website_Spec.md for the local website, scoped read/event contracts, page requirements, and browser acceptance scenarios. Plan it in M0, build core simulation pages in M1, and complete the website in M5; this revision does not execute those milestones.
 - Use the newer prompt pack's sequence: one numbered prompt at a time. Prompt 1 stops after M0. Do not execute the broader combined kickoff in section 26 of the older plan.
 - CODEX_START.md contains the exact initial prompt. Later prompts come from the original prompt pack after the prior acceptance checks pass.
 - Favor minimal, reviewable changes and meaningful checks. Finish authorized offline work using documented reasonable assumptions; ask only for facts that materially block dependent work.
@@ -23,6 +24,8 @@ The current starting task is Prompt 1 (M0) only. This repository is a context mi
 Simulation/paper only. LIVE_TRADING_ENABLED=false; approved live capital=0; LLM_ALLOW_CLOUD_FALLBACK=false; paid data budget=0. Use fictional simulation symbols independently of any live allowlist. Current financial authority: LIVE_NOT_AUTHORIZED.
 
 These are required defaults for implementation. This migration has not implemented or tested runtime configuration. The research model receives sanitized evidence and no live credentials, broker-write tools, privileged executor socket, or authority to change risk policy. Never substitute unofficial broker APIs for the planned official gateway.
+
+The website is authenticated and loopback-only by default. It reads persisted, account/mode/run-scoped state; UI reads, filtering, charts, replay, and exports cannot invoke model inference or broker mutations. Financial calculations are authoritative in backend ledger/performance services. Preserve stale/UNKNOWN/corrected state, mode labels, source/as-of metadata, and exact financial amounts. No browser secrets, direct browser-to-MCP access, public hosting, tunnels, or new trading authority are granted by the website scope.
 
 ## Consequences / Boundaries
 
