@@ -1,0 +1,24 @@
+{
+  "format": "trading-agent-codex-handoff-v1",
+  "migration_date": "2026-10-28",
+  "application_code_included": false,
+  "full_conversation_history_included": false,
+  "next_task": "Prompt 1 (M0 only)",
+  "financial_authority": "LIVE_NOT_AUTHORIZED",
+  "sources": [
+    {
+      "original_title": "Robinhood_Local_AI_Trading_Build_Plan.md",
+      "path": "docs/Robinhood_Local_AI_Trading_Build_Plan.md",
+      "size_bytes": 79756,
+      "sha256": "0655fd23a1cd67dfe2692a75ff168f8ce8ca5eb2be55dcaffbb02907f14177ce",
+      "copied_verbatim": true
+    },
+    {
+      "original_title": "Trading_Agent_Codex_Prompts.txt",
+      "path": "docs/Trading_Agent_Codex_Prompts.txt",
+      "size_bytes": 36851,
+      "sha256": "4ceefa0418656d2d257c8e17b0dbaa1315a4e4bafa065a0b9c0f67a5ec445983",
+      "copied_verbatim": true
+    }
+  ]
+}

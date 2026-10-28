@@ -1,0 +1,659 @@
+CODEX PROMPT PACK — ROBINHOOD + LOCAL LM STUDIO
+Prepared October 27, 2026
+
+Purpose: Build the product described in Robinhood_Local_AI_Trading_Build_Plan.md through small, reviewable milestones. This pack authorizes software development and offline verification only. It does not authorize account linking, live trading, account funding, broker-setting changes, or paid services.
+
+HOW TO USE
+
+1. Use a dedicated repository. Place the existing build plan at:
+   docs/Robinhood_Local_AI_Trading_Build_Plan.md
+2. Open that repository in Codex. Run Prompt 1, then one numbered prompt at a time.
+3. Each prompt asks for implementation, appropriate verification, exact run commands, and an honest handoff. Do not stop at producing another plan.
+4. Continue after locally verifiable acceptance criteria pass. When an external dependency is unavailable, record it and continue only independent offline work. Code written against mocks is not verified broker integration.
+5. Actual account authentication belongs to a separately operated, owner-controlled runtime. Keep live brokerage credentials and broker-write tools out of Codex and the research model.
+6. The coding model and the trading application's LM Studio model are separate choices. The application must operate independently of an interactive Codex session.
+7. Use future financial actions only after a separate, explicit owner instruction with concrete scope. Completing any prompt below does not activate those actions.
+
+BUILD SEQUENCE
+
+1 — Repository, environment, and persistent boundaries (M0)
+2 — First offline trading slice (M1)
+3 — Accounting, execution, and recovery correctness (M1 hardening)
+4 — Local LM Studio research integration (M2)
+5 — Permitted data and point-in-time storage (M3)
+6 — Honest strategy and economic evaluation (M3)
+7 — Official Robinhood gateway, with writes disabled (M4)
+8 — Dashboard, scheduling, monitoring, and forward paper mode (M5)
+9 — Bounded learning in research (M8 research components brought forward)
+10 — Security, fault simulation, and readiness review
+11 — Supervised-live readiness code; activation disabled (M6)
+12 — Bounded-autonomy readiness code; activation disabled (M7/M8)
+
+WHY THIS ORDER
+
+Numerical strategies, accounting, risk checks, and measurement come before model-driven research. Self-learning begins in a research environment before it gains any live authority. A product that finds no profitable edge can remain useful in research or paper mode.
+
+Use three separate evidence tracks throughout:
+- Software: the implementation passes its relevant tests.
+- Integration/operations: the real runtime and broker behavior have been observed.
+- Investment: prospective, cost-adjusted results support an economic edge.
+
+Never infer that one track passing establishes the others.
+
+
+PROMPT 1 — ESTABLISH THE REPOSITORY AND NONNEGOTIABLE BOUNDARIES
+
+Read docs/Robinhood_Local_AI_Trading_Build_Plan.md and every applicable AGENTS.md.
+Implement M0 only. Inspect the working tree and preserve existing work. If the
+plan is missing, identify that missing prerequisite; do not reconstruct it from
+memory. Continue safe environment inspection that does not depend on the file.
+
+Objective
+Establish the smallest suitable foundation for a single-owner local trading
+application using LM Studio for inference and eventually Robinhood's official
+external-agent MCP interface. Profitability is an unproven research hypothesis.
+
+Implement
+- Inspect only the relevant repository, OS/runtime, available hardware, and
+  installed project tooling, Codex, and LM Studio. Do not scan personal files.
+- Record installed versions and unknowns. Consult current primary documentation
+  for uncertain flags, APIs, authorization, and integration capabilities.
+- Follow the plan's modular Python design and preserve an established stack
+  unless a change is justified. Use a supported pinned Python version, uv,
+  a lockfile, typed configuration, and appropriate lint/type/test commands.
+- Create or update AGENTS.md without discarding existing instructions. Persist
+  the Consequences / Boundaries below and the plan's section 23.
+- Create docs/architecture.md, docs/capability_matrix.md,
+  docs/decision_log.md, and docs/build_status.md. Record actual facts separately
+  from assumptions and capabilities that still need owner-run verification.
+- Create blank-secret configuration examples. Defaults:
+  TRADING_MODE=simulation; LIVE_TRADING_ENABLED=false;
+  approved live capital=0; LLM_ALLOW_CLOUD_FALLBACK=false;
+  paid data budget=0. Simulation may use a separate fictional symbol allowlist.
+- Establish a broker interface whose unavailable implementation explicitly
+  rejects execution; never return fabricated brokerage success.
+
+Acceptance criteria
+A clean checkout has documented setup and validation commands, a minimal
+configuration smoke check, and no usable live execution path. Invalid financial
+configuration fails clearly. The milestone backlog and unresolved dependencies
+are concrete.
+
+Consequences / Boundaries
+Make minimal, reviewable, reversible edits in this repository. Preserve unrelated
+files and user changes. Do not authenticate to financial accounts, access live
+credentials, attach broker tools to Codex, place/cancel/modify orders, move money,
+change broker settings, buy services, download model weights, enable cloud
+inference, expose a public service, deploy, push, or merge. Do not change global
+Codex/LM Studio settings. Do not use unofficial broker APIs or browser workarounds.
+Resolve uncertain protocols from primary docs; record unknowns and block only
+dependent work. Stop after M0 and report changed files, checks/results, exact
+commands, and the Prompt 2 handoff.
+
+
+PROMPT 2 — BUILD THE FIRST OFFLINE TRADING SLICE
+
+Follow AGENTS.md and the build plan. Implement an end-to-end M1 slice now,
+rather than returning only a design. Read docs/build_status.md first.
+
+Objective
+Run a deterministic synthetic market through a strategy, risk checks, simulated
+orders, fills, a durable ledger, and a report, with no network dependency.
+
+Implement
+- Strict contracts for instruments, timestamped market data, portfolio snapshots,
+  trade intents, risk policies, orders, fills, reservations, and audit events.
+- Use Decimal or integer money units for cash, quantities, fees, and sizing;
+  define rounding and precision. Feature calculations may use floating point.
+- Seeded synthetic fixtures with fictional instruments, an exchange-session
+  clock, and explicit missing/stale-data scenarios.
+- One simple deterministic long-only trend or momentum strategy, explicit HOLD,
+  and cash/passive comparison portfolios. Document the rule before tuning.
+- Persist state using PostgreSQL, migrations, and transactional reservations;
+  provide a disposable local database setup. Use local Parquet/DuckDB only
+  where needed for historical analytics.
+- Validate cash, existing positions, and reserved pending exposure before orders.
+  Use the plan's paper defaults as engineering fixtures, never live limits.
+- A simulated order lifecycle, basic partial fills/cancellations, a decision
+  journal, cash/inventory reconciliation, and a CLI report.
+- A documented offline demo using simulated USD 100,000 and unmistakable
+  SIMULATION labels. Use honest return/cost conventions.
+
+Acceptance criteria
+One documented command sequence starts the demo from a clean checkout and
+produces intents, risk decisions, simulated orders/fills, positions, P&L, and
+benchmarks. Restarting the demo does not duplicate economic effects. Tests cover
+cash/inventory conservation, basic limits, HOLD, malformed inputs, and rejection
+of attempted live activation.
+
+Consequences / Boundaries
+Fixtures and local disposable services only. No broker calls, account linking,
+secrets, live actions, paid feeds, model downloads, cloud inference, production
+changes, or unrelated edits. Do not add complex infrastructure or fake a live
+adapter. Use primary docs for uncertain implementation details, record unresolved
+assumptions, and stop at this slice. Report commands, tests, limitations, and the
+Prompt 3 handoff; do not claim synthetic performance is investment evidence.
+
+
+PROMPT 3 — HARDEN MONEY, EXECUTION, AND RECOVERY
+
+Follow AGENTS.md, the build plan, and docs/build_status.md. Harden M1 using
+meaningful invariant and failure tests. Keep scope focused on financial state.
+
+Objective
+Prevent duplicate economic effects and uncontrolled exposure across concurrency,
+timeouts, partial fills, cancellation races, and process failures.
+
+Implement
+- Durable order states including submission pending, acknowledged, partially
+  filled, filled, rejected, cancel pending, canceled, expired, UNKNOWN,
+  reconciling, and manual review.
+- Persist an intent and attempt before transport submission. Use unique intent
+  keys, database constraints, transactional cash/exposure reservations, and a
+  single account writer with leases/fencing or an equivalent sound mechanism.
+- A timeout after possible acceptance becomes UNKNOWN. Retain reservations,
+  reconcile, and block conflicting orders. Never retry a mutation blindly.
+- Apply duplicate fill/event IDs once. Correct prior events through auditable
+  adjustments; do not rewrite financial history.
+- Cancellation requests do not release unconfirmed reservations. Preserve
+  partial fills and handle a fill racing with cancellation.
+- Reconcile holdings, open orders, cash, fees, distributions, and external
+  flows. Do not count pending sale proceeds as settled capacity.
+- Separate blocking new exposure, canceling entries, and protective exits.
+  A pause must not imply liquidation or confirmed cancellation.
+- Preserve drawdown history and authorization state across restart/restore.
+
+Acceptance criteria
+Fault-injection and concurrency tests demonstrate no duplicate economic effects,
+overselling, or spending of reserved cash. Unresolved state fails closed for new
+exposure. Verify restart after each consequential state transition and restore
+followed by reconciliation. Do not claim broker exactly-once execution from
+local uniqueness alone.
+
+Consequences / Boundaries
+Use simulator/mocked transport only. Never call real submit, cancel, or account
+mutation tools. Preserve risk policy, accounting conventions, unrelated code,
+and failed evidence. No credentials or production changes. Record uncertainty,
+block dependent paths, and stop after this hardening milestone with evidence.
+
+
+PROMPT 4 — CONNECT THE APPLICATION TO LOCAL LM STUDIO
+
+Follow AGENTS.md, the build plan, and docs/build_status.md. Implement M2.
+Keep the coding environment and trading runtime separate.
+
+Objective
+Use the installed local model to extract verifiable information and prepare
+bounded research, with no financial authority.
+
+Implement
+- An LLMProvider adapter for LM Studio. Inspect supported versions/endpoints and
+  discover exact installed model IDs. Do not guess a model name.
+- Loopback-only inference by default, explicit supported authentication,
+  timeouts, bounded retries/tokens/documents/runtime, and no cloud fallback.
+  Reject redirects or configuration that would send model requests to an
+  unapproved remote endpoint.
+- Strict structured output for facts, source IDs, conflicts, uncertainty,
+  evidence gaps, and ABSTAIN/HOLD. Validate independently of model compliance.
+- The application supplies/verifies identity, account alias, timestamps, policy,
+  and strategy bindings. Do not trust these from generated text.
+- Enforce document availability cutoffs in retrieval code.
+- Research receives sanitized evidence only, with no broker tools, executor
+  socket, arbitrary shell, unrestricted SQL, or credential access.
+- Record model/weight identity where obtainable, quantization, server version,
+  prompt/config hash, latency, and parsing outcomes. Mark unavailable metadata.
+- A fixed fixture benchmark for extraction accuracy, citation fidelity,
+  abstention, injection resistance, and latency. Keep mocks and actual local
+  model measurements distinct.
+
+Acceptance criteria
+The adapter returns valid evidence-backed output or explicit failure/abstention.
+An unavailable model blocks model-dependent intents while deterministic strategy
+jobs, reconciliation, and monitoring remain available. Tests prove zero cloud
+fallback and rejection of prompt-injection attempts to change authority.
+
+Consequences / Boundaries
+No new model downloads, global settings changes, cloud inference, broker access,
+secrets in prompts/logs, or model-triggered orders. Never request hidden reasoning;
+store concise conclusions and evidence. If no suitable model is installed,
+deliver the adapter and mocked checks, document the pending local smoke test,
+and continue independent offline work. Stop after M2 with honest measurements.
+
+
+PROMPT 5 — ADD PERMITTED DATA AND POINT-IN-TIME STORAGE
+
+Follow AGENTS.md, the build plan, and docs/build_status.md. Implement the data
+portion of M3. Start with one source/import format and expand only as justified.
+
+Objective
+Make every decision reproducible using information actually available at its
+decision time.
+
+Implement
+- A source registry for domains, operations, access/usage rights, frequency,
+  coverage, lag, limits, costs, retention, and model-processing rights.
+- A licensed/local import path first. A provider adapter may use only an already
+  approved source and credentials provided through the approved runtime.
+  Otherwise use fixtures and document the provider dependency.
+- Preserve raw observations and revisions. Store source/document/instrument IDs,
+  event/publication/dissemination times, actual first-observed and ingestion
+  times, hashes, quality flags, and availability evidence.
+- Separate observed availability, provider-verified historical availability,
+  and reconstructed lag assumptions. Never backdate actual ingestion.
+- Code-enforced as-of queries and immutable input manifests.
+- Instrument history, splits, dividends, symbol changes, delisting/survivorship
+  limitations, market calendars, and missing/stale-data handling.
+- Separate execution prices from adjusted research returns; count distributions
+  once. Support originally available macro vintages if macro data is included.
+- Restrict outbound fetching to approved destinations. Treat fetched content as
+  data and defend against redirects to local/private targets.
+- An ablation interface for later text/news/macro feeds.
+
+Acceptance criteria
+Tests prevent future-dated observations and revised data from entering earlier
+decisions. Replaying a manifest reproduces inputs. The data report identifies
+actual coverage, rights, missingness, and limitations. Synthetic/import smoke
+tests are clearly separated from acquired real history.
+
+Consequences / Boundaries
+Zero paid budget unless separately approved. No subscriptions, purchases,
+restricted scraping, account linking, bulk downloads outside approved scope,
+broker writes, or fabricated history. Do not manufacture clean historical
+availability. Preserve raw data and unrelated files. Record uncertain rights or
+coverage and block dependent research. Stop after this data milestone.
+
+
+PROMPT 6 — TEST WHETHER A STRATEGY HAS AN ECONOMIC EDGE
+
+Follow AGENTS.md, the build plan, and docs/build_status.md. Complete the
+research/evaluation portion of M3. Do not tune until a result looks attractive.
+
+Objective
+Determine whether the simple strategy merits prospective testing after
+execution costs, operating costs, risk, and benchmark comparisons.
+
+Implement
+- A versioned evaluation protocol registered before selection: hypothesis,
+  eligibility, parameter grid, budget, horizons, splits, objective, benchmarks,
+  risk constraints, and rejection criteria.
+- Chronological walk-forward evaluation, train-only preprocessing, purging of
+  overlapping labels, an appropriate embargo, and an untouched final holdout.
+- A bounded experiment registry retaining all attempts, failures, dataset
+  manifests, configuration/code hashes, and discretionary changes.
+- Conservative event-driven fills: signal availability precedes execution;
+  close-derived signals cannot assume an earlier/same close fill.
+  Model gaps, spread, fees, slippage, latency, partial/unfilled limits, and volume.
+  A daily bar touching a limit is not proof of a fill.
+- Compare cash, passive, exposure/risk-matched benchmarks, the numerical
+  strategy, and an otherwise identical LLM-assisted variant through ablations.
+- Report strategy net P&L separately from product net P&L after data, compute,
+  energy, and other operating expenses. Separate realized/unrealized P&L,
+  distributions, and external flows; do not double-subtract actual fill slippage.
+- Returns, drawdown, turnover, exposure, payoff ratio, execution metrics,
+  time-aware uncertainty, regime sensitivity, and trial-selection limitations.
+- Stress tests at 2–3 times execution costs, alternate plausible parameters,
+  delayed data, missing data, gaps, and removal of the best short subperiod.
+- A cost/capital break-even view using labeled assumptions rather than promised
+  returns. Report both absolute and benchmark-relative performance.
+
+Acceptance criteria
+A reproducible report can recommend CONTINUE_RESEARCH, PAPER_TEST, or REJECT.
+Negative findings are valid. Identify LLM training-memory hindsight: historical
+document filtering cannot erase later facts already in model weights. Label
+contaminated/uncertain historical LLM results exploratory and prioritize frozen,
+prospective tests. Synthetic data cannot establish trading performance.
+
+Consequences / Boundaries
+No live actions, automatic capital changes, paid data, hidden trial deletion,
+holdout reuse, objective changes after results, or profitability guarantees.
+Preserve evidence and disclose inadequate sample size. If real data is absent,
+deliver a tested evaluation pipeline plus a clear missing-data report, not
+invented performance. Stop with a reviewable prospective-test protocol.
+
+
+PROMPT 7 — BUILD THE OFFICIAL ROBINHOOD GATEWAY WITH WRITES DISABLED
+
+Follow AGENTS.md, the build plan, and docs/build_status.md. Implement M4 code
+against the official external-agent route:
+https://agent.robinhood.com/mcp/trading
+
+Objective
+Prepare an isolated broker gateway for read-only shadowing without giving
+Codex, the local model, or development tests brokerage authority.
+
+Implement
+- A maintained MCP client behind BrokerAdapter. Check current official transport
+  and authorization documentation; do not invent tool names or argument fields.
+- An owner-run authorization/bootstrap workflow in a separate runtime/security
+  context. Codex must not receive live tokens, passwords, MFA or auth codes.
+- Capability discovery, normalized schemas, semantic classification, version
+  hashes, pagination/rate-limit handling, and a sanitized capability report.
+- An exact allowlist of approved read operations. Deny unknown or changed tools
+  and all mutations in shadow mode, including submit/cancel, watchlist changes,
+  settings, approvals, subscriptions, transfers, and indirect write operations.
+  A tool name or read-only annotation alone is not sufficient classification.
+- Bind to one approved account alias. Filter other accounts and account numbers
+  before downstream research, logs, reports, and fixtures.
+- Timestamped quotes, positions, balances, open orders, fill/status history,
+  reconciliation, and explicit unsupported/missing capabilities.
+- Document actual broker approval behavior as a runtime verification item.
+  Broker review/preview is not an assumed paper-trading account.
+- Mocked integration tests for expired authorization, account mismatch,
+  pagination, schema drift, timeouts, missing fills, and broader read scopes.
+
+Acceptance criteria
+The adapter passes contract tests using sanitized fixtures. Shadow writes are
+rejected by code before transport. Produce exact owner-run read-only verification
+instructions and a report format. Mark real authenticated discovery and shadow
+operation PENDING until the owner runs them; never label mocks as live evidence.
+
+Consequences / Boundaries
+This prompt does not authorize connecting/authenticating a financial account,
+opening/funding accounts, submitting/canceling even a test order, or changing
+broker settings. Do not attach broker MCP tools to Codex or the LLM. No unofficial
+APIs, scraping, session replay, or browser workarounds. If official capabilities
+are uncertain, fail closed, document them, and keep simulation working. Stop at
+gateway code and owner-run handoff.
+
+
+PROMPT 8 — BUILD OPERATIONS AND FORWARD PAPER MODE
+
+Follow AGENTS.md, the build plan, and docs/build_status.md. Implement M5 runtime
+and operator controls. Use the gateway only as permitted by the configured mode.
+
+Objective
+Run the application independently of Codex and observe future paper decisions
+with clear exposure, health, costs, and operational controls.
+
+Implement
+- Durable scheduled jobs, bounded retries, single-job/account concurrency,
+  session/holiday awareness, time synchronization checks, and restart recovery.
+- Store canonical UTC timestamps. Default owner-facing displays to
+  America/Chicago; use an explicit exchange calendar/timezone for trading.
+- A loopback/private authenticated dashboard with CSRF/session protection for
+  state changes, and an equivalent minimal CLI where useful.
+- Display mode, simulated/live capital, cash, holdings, pending exposure, orders,
+  realized/unrealized P&L, strategy/product costs, benchmarks, source freshness,
+  reconciliation age, model health, incidents, and authorization expiry.
+- Distinct controls for pausing new risk, requesting entry cancellations, and
+  separately authorized reductions; never equate pause with liquidation.
+- An independent watchdog: model/research failure cannot disable reconciliation
+  or previously authorized protective monitoring.
+- Paper mode uses current permitted data and internal simulated execution only.
+  Shadow mode additionally compares read-only broker state when independently
+  authorized and configured; all broker mutations remain denied.
+- Freeze the prospective strategy/model/configuration and register the start
+  timestamp before observations. Retain every decision, including HOLD.
+- Local dashboard/file alerts first. Define notifier interfaces and delivery
+  checks without sending external messages or provisioning accounts.
+
+Acceptance criteria
+An offline accelerated session demonstrates startup, decisions, watchdog,
+incident handling, paper fills, reconciliation, reports, and restart.
+Produce an owner-run forward observation procedure and daily/session evidence
+reports. At least 30 trading sessions is an operational observation target,
+not proof of profitability. Low-frequency strategies may need much longer.
+Do not simulate elapsed sessions and claim the real observation period passed.
+
+Consequences / Boundaries
+Keep live trading disabled and capital authorization zero. No broker mutations,
+public hosting, external messages, paid feeds, production deployment, or changes
+to host startup settings without scope. Use fixtures if feeds are unavailable
+and label all delayed/simulated data. Preserve adverse history and record
+uncertainty. Stop with runnable operations and pending prospective checks.
+
+
+PROMPT 9 — IMPLEMENT CONTROLLED SELF-LEARNING IN RESEARCH
+
+Follow AGENTS.md, the build plan, and docs/build_status.md. Build the research
+portion of M8 now; do not grant it live promotion authority.
+
+Objective
+Improve from matured outcomes through bounded, reproducible experiments rather
+than changing live behavior after individual wins or losses.
+
+Implement
+- A decision/outcome dataset containing exact evidence and versions, intents,
+  fills, costs, HOLD decisions, and defined label horizons.
+- Release labels only after their outcome horizon matures. Preserve corrections
+  and incomplete observations. Distinguish realized results, hypothetical
+  marks, and modeled counterfactuals.
+- Operational memory for verified incidents and data quality, kept separate
+  from strategy parameters, model weights, and policy.
+- A challenger generator restricted to a prespecified parameter/feature search
+  space, compute budget, trial count, and unchanged evaluation protocol.
+- A frozen champion and isolated challenger configurations. Record every trial,
+  failed candidate, source/model/prompt hash, and comparison.
+- Offline walk-forward evaluation and prospective challenger shadowing.
+  Include cost, turnover, uncertainty, and safety regressions.
+- Versioned promotion packages: hypothesis, diff, dataset, all trials, evidence,
+  permitted change class, prerequisites, authorization, and rollback target.
+- Drift alerts and predeclared pause rules. An alert must not invent/activate
+  a replacement strategy.
+- Dashboard labels identifying what "learning" actually changes.
+
+Acceptance criteria
+A deterministic demonstration produces matured labels, evaluates challengers,
+rejects inadequate evidence, and prepares a promotion proposal. The active
+champion cannot change without authorized activation. Failed candidates cannot
+change it through shared memory, prompt edits, or mutable feature settings.
+
+Consequences / Boundaries
+Research only. No live strategy promotion, self-issued authorization, new tools
+or assets, capital increases, live code edits/deployments, online reinforcement
+learning with account access, or model fine-tuning. Journal updates are not
+weight training. Preserve objectives, holdouts, failed results, and unrelated
+work. Record unresolved assumptions and stop with an auditable learning demo.
+
+
+PROMPT 10 — PERFORM A SECURITY AND FAILURE READINESS REVIEW
+
+Follow AGENTS.md, the build plan, and docs/build_status.md. Review the current
+implementation and fix concrete defects with minimal, reversible patches.
+
+Objective
+Find paths that could create unauthorized financial actions, corrupt accounting,
+leak sensitive data, or produce misleading performance evidence.
+
+Review and verify
+- A documented trust boundary between coding, research, owner controls,
+  privileged execution, and independent monitoring.
+- Credentials absent from model context, repositories, fixtures, reports, and
+  logs. A separately operated runtime uses protected secret injection/storage.
+- Tool/account allowlists, schema drift, outbound URL restrictions, redirects,
+  prompt injection, malformed model output, and denied mode transitions.
+- Duplicate jobs/fills, concurrent reservations, stale data/state, clock skew,
+  model failure, network partitions, ambiguous submissions, cancel/fill races,
+  broker corrections, unexpected manual trades, and external flows.
+- Crash/restart, database outage, audit-write failure, backup/restore,
+  authorization expiry, and drawdown-history persistence.
+- Independent stop/pause controls and clear limitations when disconnected.
+- Training/evaluation leakage, survivorship gaps, dividend accounting,
+  cost double counting, hidden trials, and false readiness/performance claims.
+
+Acceptance criteria
+Reuse existing adequate checks. Add tests only for meaningful uncovered risk
+paths or actual fixes. Produce an evidence matrix linking each material risk
+to the implementation and observed test result, with residual limitations.
+Distinguish CODE_PASS, EXTERNAL_VALIDATION_PENDING, BLOCKED, and FAIL.
+Actual broker behavior and a prospective track record cannot pass from mocks.
+
+Consequences / Boundaries
+Use fixtures, disposable services, and mocked broker transport. Do not probe
+real accounts, extract credentials, scan unrelated personal files, send alerts,
+call broker mutations, widen limits, deploy, or rewrite the architecture without
+a demonstrated need. Preserve failed evidence. Stop with a prioritized defect
+report and the concrete fixes/tests completed.
+
+
+PROMPT 11 — IMPLEMENT SUPERVISED-LIVE READINESS, WITHOUT ACTIVATION
+
+Follow AGENTS.md, the build plan, and docs/build_status.md. Implement M6 control
+code and mocked verification only. This request is not financial authorization.
+
+Objective
+Prepare a small, explicitly approved supervised pilot while keeping the current
+runtime incapable of placing a live order.
+
+Implement
+- A live-readiness gate requiring all of: selected live mode, separate
+  live-enabled setting, approved nonzero capital, exact account binding, approved
+  universe, instrument eligibility, valid risk policy, frozen strategy,
+  healthy data/reconciliation/audit, and unexpired owner authorization.
+- Zero capital and no active live authorization remain the checked-in defaults.
+  One environment flag must not bypass the other gates.
+- Per-intent owner approval bound to exact account, instrument, side, quantity/
+  target, price bounds, policy/strategy versions, evidence, and expiry.
+  Material changes invalidate approval; check replay and expiry.
+- A separate privileged executor validates again immediately before dispatch,
+  reserves capacity transactionally, and records before/after state.
+- Handle broker-required approval exactly as the broker requires. App approval
+  does not override it; do not promise unattested broker idempotency.
+- Mocked tests of submission, fills, cancellations, exceptions, reconciliation,
+  and revocation. Tests use an injected fake transport and never a real token.
+- A concrete unsigned activation package with unresolved fields for account,
+  capital, universe, overnight exposure, loss/exposure limits, duration,
+  monitoring, pilot observation, and recovery. No invented owner decisions.
+- Owner-run startup, reconciliation, explicit resume, shutdown, and official
+  broker-revocation instructions. Keep actual activation out of setup/demo tasks.
+
+Acceptance criteria
+Missing, stale, mismatched, or unapproved prerequisites deny dispatch.
+Approved mocked intents follow all controls. The dashboard and readiness
+report show LIVE_NOT_AUTHORIZED. Integration and investment evidence remain
+separate and cannot be marked passed by software tests.
+
+Consequences / Boundaries
+Do not link/fund accounts, obtain credentials, enable actual live mode, submit/
+cancel/modify orders, change broker approvals, move money, or treat this prompt
+as permission to trade. No production deployment or scope expansion.
+Resolve unknowns conservatively and stop with code, tests, an unsigned package,
+and the specific evidence/owner decisions still required.
+
+
+PROMPT 12 — IMPLEMENT BOUNDED-AUTONOMY READINESS, WITHOUT ACTIVATION
+
+Follow AGENTS.md, the build plan, and docs/build_status.md. Implement M7 and
+only the authorized-change machinery for M8. Keep all live authority inactive.
+
+Objective
+Prepare unattended operation inside an explicit, expiring owner envelope,
+with a frozen champion and independent monitoring.
+
+Implement
+- A versioned authorization envelope binding account, capital, symbols/assets,
+  strategy/model/prompt versions, risk policy, order/session permissions,
+  overnight policy, monitoring requirements, start time, and expiry.
+- A read-only view for research; the model and learning workers cannot issue,
+  renew, widen, replace, or modify authorization.
+- Frozen approved champion artifacts and strict execution-side revalidation.
+- Fail closed for new exposure on stale data, expired authority, unknown orders,
+  schema drift, unresolved reconciliation, audit failure, or policy breach.
+  Continue permitted monitoring and explicitly approved protective behavior.
+- Single-executor enforcement, incidents, human escalation through configured
+  channels, rollback, and restart rules. Initially require explicit resume
+  after restart/incident. Never renew authority or reset loss history.
+- Promotion machinery whose default permitted automatic change class is NONE.
+  Any future parameter/allocation adaptation requires a separately approved
+  bounded class, evidence rules, expiry, shadowing, and rollback. Code, risk,
+  capital, tools, and assets remain outside that class.
+- Adversarial simulations showing attempted authority expansion, hidden memory
+  changes, permission drift, and expired authorization are denied.
+
+Acceptance criteria
+An offline multi-session simulation operates without per-intent application
+approval only inside a synthetic authorization. Real authorization remains
+absent and live dispatch impossible in the delivered configuration.
+Produce an owner review package listing code, broker/operations, and investment
+evidence separately. Software completion does not establish an investable edge.
+
+Consequences / Boundaries
+No real activation, self-authorization, automatic renewal, capital increase,
+new assets/leverage, broker-approval bypass, live mutation, production deployment,
+or live model/code self-modification. Do not infer real permission from a
+synthetic envelope. Record uncertainty, preserve pending validation, and stop
+with a reviewable disabled implementation and activation prerequisites.
+
+
+REUSABLE PROMPT — RESUME A PARTIALLY COMPLETED MILESTONE
+
+Resume milestone [NUMBER] using docs/build_status.md, AGENTS.md, and the build
+plan. Inspect current work and test evidence first. Complete only remaining
+acceptance criteria; do not restart, duplicate working components, or broaden
+scope. Preserve pending external validation as pending. Run relevant checks and
+update the handoff with exact commands and remaining dependencies.
+
+Consequences / Boundaries
+Make minimal reversible edits. Preserve unrelated work, financial defaults,
+risk policy, evidence, and credentials isolation. No account access, real
+orders/cancellations, funding, settings changes, paid services, model downloads,
+cloud fallback, public exposure, deployment, push, or merge. Resolve uncertainty
+from primary docs; block only dependent work and stop at this milestone.
+
+
+REUSABLE PROMPT — FIX A FAILURE WITHOUT HIDING IT
+
+Investigate the following failure in the current milestone:
+[PASTE REDACTED ERROR AND THE COMMAND THAT PRODUCED IT]
+
+Read AGENTS.md, the build plan, current diff, and relevant tests. Reproduce
+locally with fixtures, identify the cause, and make the smallest correct fix.
+Add a regression test only when it verifies a meaningful risk or behavior.
+Do not weaken assertions or mark external integration passed to obtain green
+checks. Update docs/build_status.md and report evidence.
+
+Consequences / Boundaries
+No credentials, financial account calls, broker mutations, live activation,
+capital/risk changes, paid services, cloud fallback, unrelated refactoring,
+production changes, or destructive cleanup. Preserve user changes and failure
+history. Investigate uncertain mutation outcomes before retrying; stop once
+the concrete failure is fixed or its independent blocker is documented.
+
+
+STANDARD COMPLETION RESPONSE FOR EVERY PROMPT
+
+- What now works and which acceptance criteria passed.
+- Files changed and the reason for material changes.
+- Exact commands executed; actual results and relevant limitations.
+- Exact commands the owner can run next, clearly labeled offline versus
+  owner-operated integration checks.
+- Status by software, integration/operations, and investment evidence.
+- Unresolved dependencies and the next numbered prompt.
+- Current financial authority: LIVE_NOT_AUTHORIZED.
+
+Do not stop merely to ask for routine implementation choices. Finish authorized
+offline work using documented reasonable assumptions. If a choice would grant
+financial access, incur unapproved cost, expose credentials, or alter production,
+leave that dependent action disabled and present the concrete reviewable result.
+
+
+CURRENT PRIMARY REFERENCES
+
+Public documentation reviewed October 27, 2026. Authenticated capabilities,
+account eligibility, model installation, data entitlements, and actual broker
+behavior have not been verified for this project. Recheck at implementation.
+
+Robinhood — Onboarding an external agent:
+https://robinhood.com/us/en/support/articles/onboarding-an-external-agent/
+
+Robinhood — Trading with your agent:
+https://robinhood.com/us/en/support/articles/trading-with-your-agent/
+
+LM Studio — OpenAI compatibility endpoints:
+https://lmstudio.ai/docs/developer/openai-compat
+
+LM Studio — Structured output:
+https://lmstudio.ai/docs/developer/openai-compat/structured-output
+
+Important integration facts:
+- Robinhood documents an official external-agent MCP endpoint and dedicated
+  trading account, with broader read access that needs local data minimization.
+- Robinhood documents different default trade-approval settings for built-in
+  agents and external MCP accounts. Do not rely on a broker default; verify the
+  actual behavior and enforce application controls.
+- LM Studio documents compatible local API endpoints and schema-constrained
+  output. Test the selected installed model and server rather than assuming
+  all endpoints, tools, or schemas work.
+- A coding session is not the unattended trading runtime. A local model is
+  not evidence of a profitable strategy.
+

@@ -1,0 +1,29 @@
+# Local secrets and credentials
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Python and tool caches
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Build output and local application state
+build/
+dist/
+*.egg-info/
+data/
+state/
+logs/
+runs/
+
+# Operating-system metadata
+.DS_Store
+Thumbs.db
