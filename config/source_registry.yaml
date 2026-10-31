@@ -1,0 +1,8 @@
+# Source registry — build plan section 8. M0: no sources enabled.
+# Each entry must declare: owner, base domain, authentication method, allowed
+# operations, symbols covered, frequency, expected lag, rate limits, monthly
+# cost, storage rights, model-processing rights, retention, outage behavior,
+# and point-in-time suitability. Paid sources require a separately approved
+# budget (currently USD 0/month).
+version: 1
+sources: []

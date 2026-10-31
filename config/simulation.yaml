@@ -1,0 +1,89 @@
+# Trading agent configuration — SIMULATION profile.
+#
+# Governing spec: docs/Robinhood_Local_AI_Trading_Build_Plan.md, section 22.
+# All money values are quoted strings parsed as Decimal. Percentages are
+# fractions of sleeve NAV (0.05 == 5%). Live fields remain inert by default.
+#
+# Current financial authority: LIVE_NOT_AUTHORIZED.
+
+app:
+  environment: development
+  mode: simulation                # simulation | paper | shadow | supervised_live | bounded_autonomous_live | paused | reconciliation_required
+  display_timezone: America/Chicago
+  exchange_timezone: America/New_York
+  web_host: "127.0.0.1"           # loopback-only by design
+  web_port: 8000                  # must not conflict with LM Studio (default 1234)
+
+llm:
+  provider: lmstudio              # only provider implemented in v1
+  base_url: http://127.0.0.1:1234/v1   # must be loopback; cloud URLs are rejected
+  model_id: null                  # owner selects after M2 capability tests
+  auth_token_secret_ref: null     # name of a protected secret-store entry; the token itself is read from LM_STUDIO_API_TOKEN
+  allow_cloud_fallback: false     # MUST be false in v1 (fail closed)
+  max_calls_per_research_job: 4
+  max_documents_per_job: 12
+  job_timeout_seconds: 120
+
+broker:
+  provider: simulator             # simulator | robinhood
+  robinhood_mcp_url: https://agent.robinhood.com/mcp/trading
+  approved_account_id: null       # owner-controlled alias only; never a raw account number
+  allowlisted_tool_schema_digest: null
+
+live:
+  enabled: false
+  approved_capital_usd: "0"
+  owner_authorization_ref: null
+  authorization_expires_at: null
+  require_application_approval_per_intent: true
+  resume_after_restart: false
+
+paper:
+  initial_cash_usd: "100000"      # clearly labeled simulated money (plan section 13)
+  synthetic_fixture_universe:
+    - TEST_A
+    - TEST_B
+
+universe:
+  live_instrument_allowlist: []   # synthetic TEST_* IDs are never valid here
+  allow_short_sales: false
+  allow_margin_borrowing: false
+  allow_options: false
+  allow_crypto: false
+  allow_leveraged_or_inverse_funds: false
+  allow_extended_hours: false
+  allow_fractional_orders: false
+
+risk:
+  policy_version: paper-policy-v1
+  max_position_nav_fraction: "0.05"
+  max_gross_nav_fraction: "0.25"
+  max_positions: 5
+  max_order_nav_fraction: "0.02"
+  max_pending_entry_nav_fraction: "0.05"
+  min_cash_nav_fraction: "0.75"
+  max_planned_daily_turnover_nav_fraction: "0.10"
+  daily_loss_pause_nav_fraction: "0.01"
+  trailing_drawdown_pause_fraction: "0.05"
+  max_entry_spread_bps: "15"
+  max_quote_age_seconds: 5
+  max_account_state_age_seconds: 10
+  max_clock_offset_seconds: 1
+  max_participation_fraction: "0.001"
+  max_entry_orders_per_session: 10
+  entry_cancel_request_after_seconds: 60
+  default_order_type: limit
+  default_time_in_force: day
+  emergency_liquidation_enabled: false   # MUST be false until separately approved and tested
+
+learning:
+  enabled: true
+  live_auto_promotion_enabled: false     # every live promotion is manual in v1
+  max_challenger_trials_per_week: 20
+  allowed_live_change_classes: []
+  require_matured_labels: true
+
+costs:
+  paid_data_budget_usd_per_month: "0"
+  allow_paid_subscriptions: false
+  operating_cost_reporting_enabled: true

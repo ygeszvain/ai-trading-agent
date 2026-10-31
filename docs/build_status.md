@@ -1,31 +1,124 @@
 # Trading agent build status
 
-Recorded: 2026-10-28
-Current financial authority: **LIVE_NOT_AUTHORIZED**
-Approved live capital: **0 USD**
-Owner-requested observation-pilot allocation: **1,000 USD; activation pending**
-Next task: **Prompt 1 — M0**
+**Last updated:** 2026-10-31 (Prompt 1 / M0 complete)
+**Current financial authority:** LIVE_NOT_AUTHORIZED
+**Approved live capital:** 0 USD (requested USD 1,000 pilot: recorded, activation pending — plan section 24)
+**Next task:** Prompt 2 — first offline trading slice and local website (M1)
 
-## Verified state
+## M0 — Repository, environment, and persistent boundaries
 
-The specification and 12-prompt implementation pack were initially recovered verbatim. They are now revised for the requested local trading website; the initial Git commit preserves the originals. The handoff includes updated repository instructions, the exact current Prompt 1, source/current hashes, and a dedicated local Git repository.
+### What works now
 
-No application implementation has been verified or included in this repository. Do not infer completed milestones from the presence of planning documents or the migration commit.
+- Clean-checkout setup and validation commands are documented (README) and were
+  executed successfully on this host: `uv sync`, `uv run ruff check .`,
+  `uv run mypy` (strict), `uv run pytest` (51 tests), and
+  `uv run trading-agent check-config`.
+- Typed configuration with fail-closed rules (plan section 22 contract,
+  `.env.example`, `config/simulation.yaml`, `config/live.template.yaml`,
+  `config/source_registry.yaml`). Invalid financial configuration exits 2 and
+  lists every violation; a missing file, malformed YAML, or a bad env value
+  all fail clearly.
+- No usable live execution path: the Robinhood adapter is explicitly
+  unavailable, the simulator placeholder rejects all execution, and the
+  deterministic activation gate (12 prerequisites) can never authorize in M0
+  — even for a fully populated live profile plus a hypothetical verified
+  gateway.
+- Disposable local database: `docker compose` PostgreSQL 17 on
+  127.0.0.1:5433 (container `trading-agent-postgres`, healthy, verified with
+  a SQL round-trip; port 5432 belongs to the unrelated dissertation
+  `fda-postgres`).
+- Website contract documented (routes, startup/auth, scoping, read-model and
+  event contracts, page-to-backend map, M1/M5 backlog) in
+  [website.md](website.md). **No UI exists; none is claimed.**
 
-## Website scope revision — 2026-10-28
+### Acceptance criteria (Prompt 1)
 
-Requested: a local website to see all trading activity and details. The expanded contract is in `Local_Trading_Website_Spec.md` and build-plan section 18. Prompt 1 plans its contracts; Prompt 2 builds the first persisted simulation website; Prompt 8 completes all pages, charts, detail, updates, exports, and operations. Prompt 10 verifies material browser/read-model risks.
+| Criterion | Result |
+| --- | --- |
+| Clean checkout has documented setup and validation commands | PASS — README; all commands run successfully (results in the M0 evidence section below) |
+| Minimal configuration smoke check | PASS — `uv run trading-agent check-config` (exit 0 on `config/simulation.yaml`; exit 2 + per-violation messages on invalid configs) |
+| No usable live execution path | PASS — gate + adapter rejections, covered by 51 tests including property tests |
+| Invalid financial configuration fails clearly | PASS — every violation class tested (negative/NaN/malformed capital, cloud fallback, non-loopback URLs, TEST_* in live allowlist, over-unity limits, unknown keys, live-mode requirement matrix) |
+| Milestone backlog and unresolved dependencies are concrete | PASS — ledger below; capability matrix lists pending owner-run items and what each blocks |
 
-This is a specification change only. Website implementation, browser screenshots, actual UI performance, and all application acceptance checks remain pending. No financial, account-connection, or hosting authority changed.
+### Changed files (M0)
+
+- New: `pyproject.toml`, `uv.lock`, `.python-version`, `.env.example`,
+  `docker-compose.yml`, `config/simulation.yaml`, `config/live.template.yaml`,
+  `config/source_registry.yaml`
+- New source: `src/trading_agent/{__init__,exceptions,money}.py`,
+  `src/trading_agent/config/{__init__,models,loading}.py`,
+  `src/trading_agent/contracts/{__init__,broker}.py`,
+  `src/trading_agent/execution/{__init__,broker_interface,simulator,robinhood_mcp,factory}.py`,
+  `src/trading_agent/gates/{__init__,live_activation}.py`,
+  `src/trading_agent/cli/{__init__,__main__,main}.py`
+- New tests: `tests/conftest.py`, `tests/unit/{test_config_validation,test_broker_adapters,test_live_activation_gate,test_cli}.py`,
+  `tests/property/test_config_invariants.py`, package `__init__.py` files
+- New docs: `docs/architecture.md`, `docs/website.md`,
+  `docs/capability_matrix.md`, `docs/decision_log.md`
+- Updated: `docs/build_status.md` (this file), `README.md`, `AGENTS.md`
+- Preserved unchanged: the two recovered source documents, the prompt pack,
+  `CODEX_START.md`, `migration_record.md`, `CHECKSUMS.sha256`,
+  `SOURCE_MANIFEST.json` (originals remain in Git history; current hashes
+  match the migration manifest)
+
+### Exact commands and actual results (run 2026-10-31 on the target host)
+
+| Command | Result |
+| --- | --- |
+| `brew install uv` | uv 0.13.6 installed (Homebrew bottle) |
+| `uv sync` | Resolved 35 packages; wrote `uv.lock`; created `.venv` (Python 3.13.2); pydantic 2.14.2, PyYAML 6.0.3, FastAPI/uvicorn locked; installed `trading-agent 0.1.0` (editable) |
+| `uv sync --reinstall-package trading-agent` | Rebuilt the editable install after source files were added |
+| `uv run ruff check .` | All checks passed (after formatting) |
+| `uv run ruff format --check .` | All files formatted |
+| `uv run mypy` | Success: no issues found in 18 source files (strict) |
+| `uv run pytest -q` | **51 passed** in ~0.3 s |
+| `uv run trading-agent check-config --probe-llm` | exit 0; mode SIMULATION; broker simulator (execution disabled); gate: 11 unmet prerequisites, LIVE_NOT_AUTHORIZED; LM Studio probe: reachable, 4 models loaded; `result: OK` |
+| `uv run trading-agent check-config --config /tmp/bad-trading-config.yaml` | exit 2; listed 3 violations (cloud fallback, negative capital, over-unity limits) with clear messages |
+| `docker compose up -d` | `trading-agent-postgres` started (reused cached postgres:17 image); healthy |
+| `psql -h 127.0.0.1 -p 5433 -U trading_agent -d trading_agent -c "select version();"` | `PostgreSQL 17.9 ... on aarch64-unknown-linux-gnu`; SQL round-trip OK |
+
+### Checks not run (honest limitations)
+
+- No website, browser, or UI check — no UI exists (M1).
+- No LM Studio inference performed: only read-only route probes in M0
+  (decision D15). Functional endpoint/model capability tests are M2.
+- No broker interaction of any kind; no MCP client installed.
+- No trading engine, ledger, or strategy: simulator execution and all plan
+  section 16 persistence arrive in M1.
+- LM Studio authentication state unverified (plan section 9; M2).
+- Host security observation (dissertation `fda-postgres` on 0.0.0.0:5432)
+  recorded but not acted on — outside this repository.
+
+### Evidence tracks
+
+| Track | State |
+| --- | --- |
+| Software | Foundation passes offline tests (lint/type/51 tests/CLI); no trading engine yet |
+| Integration/operations | LM Studio server observed reachable (4 models); local Postgres verified; broker: nothing performed (PENDING owner-run, M4) |
+| Investment | Nothing measured. Profitability remains unproven. |
+
+### Unresolved dependencies (concrete)
+
+1. **Owner-run broker authorization + capability discovery** (M4/Prompt 7) —
+   blocks the real gateway, shadow mode, and every live mode.
+2. **LM Studio functional capability tests + model selection** (M2/Prompt 4) —
+   blocks model-dependent research; deterministic work does not wait.
+3. **Owner pilot fields** (account, limits, dates, mode, overnight policy,
+   funding) — blocks M6/M7 activation screens; not needed for M1.
+4. **Data provider/budget decision** (M3) — blocks real historical data;
+   fixtures proceed.
+5. **Remote repository selection** (none exists) — blocks any push; local
+   commits only for now.
+
+None of these block Prompt 2's offline work.
 
 ## Milestone ledger
 
-The USD 1,000 request is now recorded in build-plan section 24 and the future website's owner-approval requirements. It sets the intended pilot budget; it does not complete any milestone, select an account, transfer funds, or create active trading authority. The next build task remains Prompt 1.
-
 | Prompt | Scope | Status |
 | --- | --- | --- |
-| 1 | Repository, environment, and persistent boundaries (M0) | Pending |
-| 2 | First offline trading slice and local website (M1) | Pending |
+| 1 | Repository, environment, and persistent boundaries (M0) | **Complete 2026-10-31** — evidence above |
+| 2 | First offline trading slice and local website (M1) | Next |
 | 3 | Accounting, execution, and recovery hardening | Pending |
 | 4 | Local LM Studio research integration (M2) | Pending |
 | 5 | Permitted data and point-in-time storage (M3) | Pending |
@@ -37,27 +130,17 @@ The USD 1,000 request is now recorded in build-plan section 24 and the future we
 | 11 | Supervised-live readiness; activation disabled (M6) | Pending |
 | 12 | Bounded-autonomy readiness; activation disabled (M7/M8) | Pending |
 
-## Evidence tracks
+## Next action
 
-| Track | Current evidence |
-| --- | --- |
-| Migration / specification | Original sources retained in Git; current prompt/spec consistency, archive contents, links, hashes, and local Git state checked; see migration record |
-| Software | No application build, unit tests, or configuration smoke checks have run |
-| Integration / operations | No target-machine, LM Studio, data-provider, or broker behavior verified |
-| Investment | No measured strategy results; profitability remains unproven |
+Read AGENTS.md, this file, the build plan, and `docs/Trading_Agent_Codex_Prompts.txt`
+(Prompt 2). Implement M1: the first offline vertical slice — strict
+configuration is done in M0; M1 adds typed data/decision/policy/order/fill/
+ledger contracts, synthetic market fixtures, one deterministic strategy plus
+HOLD, cash/passive baselines, the risk engine with reservations, the
+simulated order lifecycle, the first website pages (Overview, Activity,
+Orders/fills, Portfolio/instrument per `docs/website.md`), PostgreSQL
+migrations, the documented offline demo, and the restart/idempotency
+guarantees. Do not widen risk limits or change evaluation objectives to make
+tests pass. Stop at M1 and report honestly.
 
-## Unresolved dependencies
-
-- Owner's target folder or remote repository and Codex environment.
-- Actual runtime, hardware, installed tooling, and available local model IDs.
-- Data-source permissions and real historical coverage.
-- Official broker capabilities, account eligibility, and owner-operated integration setup.
-- Separately scoped authorization for any future financial action.
-
-These dependencies do not block Prompt 1's authorized offline development. Inspect the actual target environment, document facts and assumptions separately, and block only dependent work.
-
-## Next action and completion contract
-
-Read `AGENTS.md`, `CODEX_START.md`, and the full build plan. Execute Prompt 1 only. Create the M0 foundation and its required evidence; do not count this migration as M0 completion.
-
-At each milestone, record changed files, acceptance evidence, exact commands and results, limitations, software/integration/investment status, and the next numbered prompt. Keep current financial authority explicit.
+Current financial authority: **LIVE_NOT_AUTHORIZED**.

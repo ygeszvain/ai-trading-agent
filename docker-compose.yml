@@ -1,0 +1,38 @@
+# Disposable local database for the trading agent (build plan section 6:
+# PostgreSQL for durable jobs, ledger state, reservations, and transactional
+# locks).
+#
+# Facts this file must respect on this host (2026-10-31):
+#   - 127.0.0.1:5432 is occupied by the dissertation's fda-postgres container.
+#   - This instance therefore binds 127.0.0.1:5433 ONLY (loopback).
+#   - Never point the trading agent at fda-postgres or any dissertation data.
+#
+# Usage:
+#   docker compose up -d      # start (reuses the cached postgres:17 image)
+#   psql -h 127.0.0.1 -p 5433 -U trading_agent -d trading_agent
+#   docker compose down       # stop (data volume is kept; `down -v` removes it)
+name: trading-agent
+services:
+  postgres:
+    image: postgres:17
+    container_name: trading-agent-postgres
+    environment:
+      POSTGRES_USER: trading_agent
+      POSTGRES_DB: trading_agent
+      # Loopback-only disposable dev database. Trust auth is acceptable here
+      # because the port is not exposed beyond 127.0.0.1. For any non-loopback
+      # deployment, set TRADING_AGENT_PG_PASSWORD in .env and remove trust.
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_PASSWORD: ${TRADING_AGENT_PG_PASSWORD:-}
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - trading-agent-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U trading_agent -d trading_agent"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+    restart: unless-stopped
+volumes:
+  trading-agent-pgdata:

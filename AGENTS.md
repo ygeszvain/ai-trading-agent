@@ -4,14 +4,14 @@
 
 Build a single-owner local research/trading application. Codex develops the software; LM Studio supplies local research inference. The unattended application must operate independently of an interactive Codex session. Deterministic risk, authorization, ledger, and reconciliation services govern financial behavior. Profitability is an unproven research hypothesis.
 
-The current starting task is Prompt 1 (M0) only. This repository is a context migration, not completed M0 software. Inspect docs/build_status.md before claiming progress.
+Prompt 1 (M0) is complete as of 2026-10-31: the foundation, typed fail-closed configuration, broker interface with explicitly rejecting adapters, live-activation gate, verified disposable database, and the M0 documentation set exist (see docs/build_status.md). The next task is Prompt 2 (M1). Inspect docs/build_status.md before claiming progress.
 
 ## Read and execute
 
 - Read applicable AGENTS.md files and inspect the working tree before editing. Preserve user work and any more specific applicable instructions.
 - Read docs/Robinhood_Local_AI_Trading_Build_Plan.md in full for requirements, and docs/Trading_Agent_Codex_Prompts.txt for the selected numbered task.
 - Read docs/Local_Trading_Website_Spec.md for the local website, scoped read/event contracts, page requirements, and browser acceptance scenarios. Plan it in M0, build core simulation pages in M1, and complete the website in M5; this revision does not execute those milestones.
-- Use the newer prompt pack's sequence: one numbered prompt at a time. Prompt 1 stops after M0. Do not execute the broader combined kickoff in section 26 of the older plan.
+- Use the newer prompt pack's sequence: one numbered prompt at a time. Prompt 1 (M0) is complete; do not execute the broader combined kickoff in section 26 of the older plan.
 - CODEX_START.md contains the exact initial prompt. Later prompts come from the original prompt pack after the prior acceptance checks pass.
 - Favor minimal, reviewable changes and meaningful checks. Finish authorized offline work using documented reasonable assumptions; ask only for facts that materially block dependent work.
 - Use the plan's modular Python design. Preserve an established stack when integrating into an existing repository. Use Decimal or integer units for money and explicit precision/rounding.
@@ -23,7 +23,7 @@ The current starting task is Prompt 1 (M0) only. This repository is a context mi
 
 Simulation/paper only. LIVE_TRADING_ENABLED=false; approved live capital=0; LLM_ALLOW_CLOUD_FALLBACK=false; paid data budget=0. Use fictional simulation symbols independently of any live allowlist. Current financial authority: LIVE_NOT_AUTHORIZED.
 
-These are required defaults for implementation. This migration has not implemented or tested runtime configuration. The research model receives sanitized evidence and no live credentials, broker-write tools, privileged executor socket, or authority to change risk policy. Never substitute unofficial broker APIs for the planned official gateway.
+These are required defaults for implementation. M0 implements and tests the typed runtime configuration that enforces them (config/ + .env.example); invalid financial configuration fails startup clearly. The research model receives sanitized evidence and no live credentials, broker-write tools, privileged executor socket, or authority to change risk policy. Never substitute unofficial broker APIs for the planned official gateway.
 
 The website is authenticated and loopback-only by default. It reads persisted, account/mode/run-scoped state; UI reads, filtering, charts, replay, and exports cannot invoke model inference or broker mutations. Financial calculations are authoritative in backend ledger/performance services. Preserve stale/UNKNOWN/corrected state, mode labels, source/as-of metadata, and exact financial amounts. No browser secrets, direct browser-to-MCP access, public hosting, tunnels, or new trading authority are granted by the website scope.
 
@@ -51,7 +51,7 @@ The following requirements are preserved from section 23 of the build plan:
 - Stop at the milestone's boundary with a reviewable result, test evidence, limitations, and the next dependency.
 - A roadmap describing a future live stage does not authorize that stage's financial actions.
 
-Prompt 1 additionally prohibits deployment, push, merge, model-weight downloads, global Codex/LM Studio settings changes, financial-account authentication, and exposing a public service. Preserve those limits for this starting task. Consult its full original boundaries in CODEX_START.md.
+Prompt 1 additionally prohibited deployment, push, merge, model-weight downloads, global Codex/LM Studio settings changes, financial-account authentication, and exposing a public service. Those limits were preserved throughout M0 and remain in force for all later work (consult CODEX_START.md for the full original boundaries). Each subsequent numbered prompt carries its own Consequences / Boundaries in docs/Trading_Agent_Codex_Prompts.txt.
 
 Do not auto-advance through the remaining prompts. Future readiness code does not authorize account connection or live activation. A missing external dependency blocks dependent work; continue independent offline work within the selected prompt.
 
