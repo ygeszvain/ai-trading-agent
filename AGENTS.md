@@ -51,9 +51,11 @@ approvals across asset classes). It completed with all requested collections
 covered; this exception is also consumed. It did not write the ledger or prove
 reconciliation. Later instrument/mode choices are in the ignored private
 `.data/owner-review/owner-request.current.json` pointer and its unsigned artifact.
-These are owner decisions, not broker credentials or authorization. Preserve
-unknown duration/overnight/monitoring fields; ask for them here without inventing
-answers. Keep the private requested universe and all broker observations out of
+These are owner decisions, not broker credentials or authorization. The owner
+has since supplied the requested duration, overnight constraint and email
+destination; retain them privately and do not ask again. Exact activation times,
+end-of-day execution policy, independent delivery and incident-response details
+remain unresolved. Keep the private requested universe and all broker observations out of
 public commits. Runtime capital stays zero and no live configuration is changed.
 
 ## Publication scope — November 1, 2026

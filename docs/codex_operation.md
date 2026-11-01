@@ -112,6 +112,38 @@ fixtures, reports or logs. Account-wide risk/reconciliation must still account
 for existing holdings outside a requested single-instrument scope; this does not
 authorize selling or managing those holdings.
 
+## Private operational choices and remaining control gaps
+
+The owner later supplied the requested authorization horizon, overnight
+constraint and email destination. Those personal choices remain in a new private
+unsigned request version; prior drafts are preserved. Start and expiry timestamps
+remain unset. A separate private operations review records the implementation
+requirements and unresolved exit/escalation details. No test email, schedule,
+monitor deployment or financial action is authorized by recording a destination.
+
+The added synthetic overnight regression verifies exposure detection at session
+close, persisted local escalation, no hidden next-session progression, unchanged
+holdings/loss history and zero automatic liquidation. The existing expiry,
+missing-monitor, incident-queue and disabled-live checks are reused. Targeted
+result: 7 passed, 41 deselected. This verifies detection/pause only, not a
+pre-close exit implementation or real email delivery. The current notice channel
+remains LOCAL_REVIEW_QUEUE / QUEUED_LOCAL_NOT_SENT. Actual sender/independent
+monitor deployment, delivery/acknowledgement and end-of-day order/fill handling
+remain prerequisites. Never convert a no-overnight preference into an unapproved
+sale or guarantee liquidation during a halt/disconnection.
+
+For any proposed intraday pilot, account/instrument eligibility and settlement
+rules still require current broker validation. Public sources checked November 1,
+2026: [Robinhood day-trading rules](https://robinhood.com/us/en/support/articles/day-trade-calls/)
+describe replacement of its prior PDT restrictions from June 4, 2026;
+[settlement/buying power](https://robinhood.com/us/en/support/articles/settlement-and-buying-power/)
+distinguishes cash-account settled-fund restrictions from margin-account handling.
+Do not import an old $25,000 PDT rule as a verified current blocker or infer a
+specific account's permissions from a general article. Session-close controls
+must respect [official early-close calendars](https://nasdaqtrader.com/Trader.aspx?id=Calendar).
+These public checks did not access or change an account and do not prove broker
+eligibility, authorize leverage or verify an actual strategy.
+
 ## Authentication and interactive owner steps
 
 The native Codex Robinhood connection succeeded during this check; the owner
@@ -125,9 +157,10 @@ login and the coding agent does not read its private directory. Never paste
 credentials or raw identifiers into chat. Preserve ambiguous failures and report
 a sanitized classification instead of blindly retrying.
 
-Missing asset selection, exact frozen strategy/policy bindings, overnight/session
-permissions, duration/expiry, monitoring/recovery decisions and operational proof
-can be collected progressively here. A conversational answer is an inactive draft
+Requested instrument, mode, duration, overnight constraint and recipient have
+been recorded privately. Exact strategy/policy bindings, activation timestamps,
+end-of-day exit rules, monitoring/recovery decisions and operational proof can
+be collected progressively here. A conversational answer is an inactive draft
 until the separate authorization machinery exists and validates it. A UI reply,
 website refresh or app permission does not override server/executor denial.
 

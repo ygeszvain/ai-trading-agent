@@ -1,9 +1,36 @@
 # Trading agent build status
 
-**Last updated:** 2026-11-01 (owner-approved inventory and private pilot draft; live disabled)
+**Last updated:** 2026-11-01 (private operational choices and overnight regression; live disabled)
 **Current financial authority:** LIVE_NOT_AUTHORIZED
 **Approved live capital:** 0 USD. The original USD 500 owner request remains unsigned and inactive; current private native-read observations are excluded from public evidence. Earlier USD 1,000 worksheets remain historical.
 **Next dependency:** Local gateway/account-scoped normalization, reconciliation and external validation; the native Codex read-only check passed, with no next numbered prompt or live activation path.
+
+## Private operational choices and overnight control evidence
+
+Recorded the owner's requested authorization horizon, overnight constraint and
+email destination in a new private unsigned request version, preserving its
+predecessor and advancing the protected local pointer. Private owner choices
+and recipient are excluded from public files. Start/expiry timestamps remain
+null; no activation countdown, email send, broker call or runtime change occurred.
+The private operations review records unresolved exit/monitoring details.
+
+Added one meaningful uncovered synthetic regression for forbidden holdings at
+session close and subsequent session entry. It proves a persisted incident,
+paused execution, preserved holdings/high-water/daily-loss history, no implicit
+resume or renewal, no automatic liquidation and local-only queued notices.
+Reused existing expiry, monitor-failure, drift/escalation and live-denial checks.
+
+Exact command: `uv run pytest -q tests/autonomy/test_envelope.py -k 'forbidden_overnight or multi_session_demo or expiry_is_not_renewed or schema_or_permission_drift or missing_monitor or no_live_executor'` — **7 passed, 41 deselected, 3.69s**.
+`uv run ruff check tests/autonomy/test_envelope.py` and `git diff --check` — PASS.
+No runtime source changed. Full-suite/PostgreSQL and actual broker/email checks
+were not rerun. Evidence remains under ignored
+`.data/stabilization/evidence/pilot-operations-review.txt`.
+
+CODE_PASS applies to the mocked detection/pause paths only. A concrete pre-close
+exit policy and implementation, verified independent email delivery, incident
+response, real executor/signing and prospective evidence remain BLOCKED or
+EXTERNAL_VALIDATION_PENDING. The requested risk preference remains unapplied;
+capital zero, simulation mode and automatic class NONE are preserved.
 
 ## Owner-approved account inventory and private pilot draft
 

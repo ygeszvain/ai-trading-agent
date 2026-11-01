@@ -24,9 +24,9 @@ from trading_agent.autonomy.owner_fixture import sign_fixture
 from trading_agent.autonomy.research import ResearchView
 from trading_agent.autonomy.store import Store
 from trading_agent.db.schema import m7_changes, m7_envelopes, m7_notices
-from trading_agent.supervised.contracts import digest
+from trading_agent.supervised.contracts import Fill, digest
 from trading_agent.supervised.executor import LiveExecutor
-from trading_agent.supervised.fake import FakeTransport
+from trading_agent.supervised.fake import FakeTransport, Observation
 from trading_agent.supervised.journal import Denied
 
 
@@ -315,6 +315,51 @@ def test_missing_monitor_fails_before_fake_wire(system):
     with pytest.raises(Denied):
         s.exe.dispatch(intent(s), s.envelope.envelope_id, now=NOW)
     assert s.fake.calls == []
+
+
+def test_forbidden_overnight_holding_pauses_and_persists_without_automatic_liquidation(system):
+    s = system
+    entry = intent(s, "held-through-close")
+    order = s.exe.dispatch(entry, s.envelope.envelope_id, now=NOW)
+    fill = Fill(
+        fill_id="overnight-fixture-fill",
+        order_id=entry.intent_id,
+        account_key=KEY,
+        instrument=entry.instrument,
+        side=entry.side,
+        quantity=entry.quantity,
+        price=entry.limit_price,
+        fee=Decimal(".01"),
+        at=NOW,
+    )
+    s.fake.observations[entry.intent_id] = Observation(
+        status="filled", broker_order_id=order.broker_order_id, fills=(fill,)
+    )
+    s.exe.reconcile_order(KEY, entry.intent_id, now=NOW)
+    held = read(s)
+    before = list(s.fake.calls)
+
+    # The monitor detects forbidden exposure at close; detection is not an exit.
+    report = run_monitor(s.store, KEY, s.root, s.envelope.sessions[0].closes_at)
+    assert "overnight_exposure_not_permitted" in report.issues
+    assert read(s).paused and not read(s).resumed
+    assert read(s).holdings == held.holdings and s.fake.calls == before
+
+    # A new session cannot conceal the unresolved holding or reset loss history.
+    next_open = s.envelope.sessions[1].opens_at
+    with pytest.raises(Denied, match="overnight_exposure_not_permitted"):
+        s.exe.observe_market(KEY, held.quote.changed(as_of=next_open), now=next_open)
+    after = read(s)
+    assert after.holdings == held.holdings and after.cash == held.cash
+    assert after.high_water_mark == held.high_water_mark
+    assert after.day_start_nav == held.day_start_nav and s.fake.calls == before
+    assert runtime(s).session_id == s.envelope.sessions[0].session_id
+    assert runtime(s).authorized_generation is None
+    with s.store.transaction() as conn:
+        assert s.store.envelope(conn, KEY).digest() == s.envelope.digest()
+        notices = [json.loads(row.document) for row in conn.execute(select(m7_notices))]
+        assert any(row["reason"] == "overnight_exposure_not_permitted" for row in notices)
+        assert all(row["delivery_status"] == "QUEUED_LOCAL_NOT_SENT" for row in notices)
 
 
 def test_revocation_preserves_read_only_monitoring_and_does_not_cancel_or_renew(system):
