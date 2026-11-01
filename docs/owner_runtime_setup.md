@@ -2,40 +2,47 @@
 
 The project can run synthetic simulation now. Live trading cannot start from the
 delivered configuration. This guide prepares official OAuth/schema discovery in
-a separate owner-operated runtime; it does not activate a trading strategy.
+an owner-operated runtime; it does not activate a trading strategy.
 Read the [repair report](stabilization_and_auth_readiness.md) and current
 [build status](build_status.md) first. No financial-account authentication has
 been performed by the coding agent.
 
-## 1. Keep the owner runtime separate
+## 1. Use an approved local account
 
-Create a separate **standard, non-admin macOS user named `ai-trading-executor`**
-using the operating system's user-management controls. Log in interactively as
-that user. Do not run Codex, research inference, or general-purpose agent tools
-under that identity. Do not grant the coding user access to its private home or
-credential directory. Separate identities have not been created or independently
-validated by this implementation; the operator must verify access controls.
+The owner explicitly approved using **`randygeszvain`** on November 1, 2026.
+You can run the commands below from that account's existing checkout; no separate
+macOS user is required for this selected setup. The separate standard account
+`ai-trading-executor` remains supported. Other usernames and mismatched real/
+effective UIDs are rejected. Do not run the login command with `sudo`.
 
-This is required by [AGENTS.md](../AGENTS.md): “Keep live broker credentials and
-execution privileges out of the coding environment.” The CLI checks the OS
-username/effective UID before opening any auth client or browser. There is no
-configuration flag to waive the guard. This is a local guard, not a substitute
-for deployed OS isolation or independent monitoring.
+This owner-selected exception supersedes the earlier separate-user requirement
+for authentication. Private files stay outside the checkout, owned by the current
+user with strict permissions. Those permissions do not isolate credentials from
+other processes running as the same user; separate OS privilege isolation is not
+claimed. Codex/research must not read the private credential directory, run the
+real login flow, or receive credentials. The owner completes browser consent
+privately. Live execution remains disabled.
 
-## 2. Install the reviewed source under that user
+## 2. Use the reviewed source
 
-From that user's terminal, with Git and uv installed:
+From the existing `trading-agent-codex` checkout under `randygeszvain`, after the
+update is installed:
+
+```sh
+uv sync --locked
+uv run trading-agent check-config
+```
+
+For a fresh checkout instead:
 
 ```sh
 git clone --branch codex/offline-stabilization https://github.com/ygeszvain/ai-trading-agent.git
 cd ai-trading-agent
 uv sync --locked
-uv run trading-agent check-config
 ```
 
-Verify the reviewed commit locally before authentication. Do not copy an existing
-broker token, browser session, `.env`, owner web-auth file or account database into
-this checkout. The simulation settings keep live capital zero and live disabled.
+Do not copy broker tokens, browser sessions or private account data into the
+checkout. The simulation settings keep live capital zero and live disabled.
 
 ## 3. Complete official browser consent privately
 
@@ -55,7 +62,7 @@ rather than treating setup as permission for those actions.
 
 The public metadata advertises `internal`; it is **not verified read-only**.
 Robinhood describes read access across accounts, so keep this credential in the
-isolated runtime even though the commands here never call trading tools. Review
+private runtime directory even though the commands here never call trading tools. Review
 [Robinhood's official external-agent onboarding](https://robinhood.com/us/en/support/articles/agentic-trading-overview/)
 and [trade approval limitations](https://robinhood.com/us/en/support/articles/trading-with-your-agent/).
 No account linkage/funding or approval-setting change is part of these commands.

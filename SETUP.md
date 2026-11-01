@@ -216,11 +216,13 @@ feed, or redistribute data based on this snapshot.
 
 The real trading gateway and legacy OAuth paths stay quarantined. The new
 [owner-runtime guide](docs/owner_runtime_setup.md) provides PKCE browser OAuth
-and schema-only discovery under a separate required OS identity. It has been
+and schema-only discovery under the owner-approved `randygeszvain` or separate
+`ai-trading-executor` OS identity. It has been
 tested with fake transport; actual broker behavior remains pending. No broker
 authentication or protected MCP request was performed in this review. Setting
 shadow/live flags cannot activate dispatch. Keep real credentials outside the
-coding environment; setup/demo never funds, trades or activates.
+model context and coding tools; same-user storage is not OS isolation.
+Setup/demo never funds, trades or activates.
 
 ## 6a. Disabled bounded-autonomy review (Prompt 12)
 

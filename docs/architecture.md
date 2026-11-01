@@ -19,8 +19,10 @@ account-scoped executor lease/fence, baseline fill books and repeatable-read web
 bootstrap now pass disposable integration tests. Browser cursors bind scope and
 expiry; reconnect gaps require resnapshot. Exports are synthetic-only and bounded.
 
-`owner_runtime/auth.py` is an owner-run entry point under the exact separate OS
-identity `ai-trading-executor`, outside the coding/research credential boundary.
+`owner_runtime/auth.py` is an owner-run entry point. The owner later approved
+`randygeszvain` as well as `ai-trading-executor`; private storage checks remain,
+but same-user execution is not an OS credential boundary. Coding/research must
+not read that directory or run real authentication.
 It provides pinned official public-client PKCE, protected storage and schema-only
 discovery, not a broker execution adapter. No actual OS isolation deployment,
 authentication or account binding has been attested. The advertised `internal`

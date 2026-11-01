@@ -463,7 +463,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    auth = subparsers.add_parser("owner-auth", help="Separate OS runtime only; no trading")
+    auth = subparsers.add_parser("owner-auth", help="Approved local owner login; no trading")
     auth.add_argument("action", choices=("login", "status", "discover"))
     auth.add_argument("--runtime-dir", type=Path, required=True)
     auth.set_defaults(func=_run_owner_auth)
@@ -614,7 +614,7 @@ def _run_owner_auth(args: argparse.Namespace) -> int:
         )
     except (AuthError, OSError, ValueError):
         print(
-            "Owner authentication unavailable: verify separate OS identity, private "
+            "Owner authentication unavailable: verify approved OS identity, private "
             "runtime directory and official flow. No trading activated.",
             file=sys.stderr,
         )

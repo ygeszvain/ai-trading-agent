@@ -12,6 +12,19 @@ setup and funds have not been independently verified. The request is recorded in
 applied as a risk-policy change. Existing conservative limits remain intact.
 There is no demonstrated best strategy or investment edge.
 
+## Subsequent owner-selected authentication account exception
+
+After the original verification below, the owner explicitly requested allowing
+`randygeszvain`. The local identity guard now allows that username and
+`ai-trading-executor`; all other usernames and mismatched effective UIDs deny.
+Private storage ownership/modes, outside-checkout and symlink/ancestor checks,
+PKCE/issuer/state/profile binding and actual live-dispatch denial remain.
+The earlier coding-user-denial result below is retained as historical evidence,
+not a claim about the revised guard. Same-user processes can access same-user
+files; this exception does not establish OS isolation. No real credential was
+read or authentication attempted while implementing it. See the current
+[owner instructions](owner_runtime_setup.md) and [build status](build_status.md).
+
 ## Defects, observed evidence, and residual limitations
 
 CODE_PASS means the stated software path passed offline verification. It does

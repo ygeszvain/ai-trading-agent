@@ -1,3 +1,4 @@
+from types import SimpleNamespace
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import httpx
@@ -11,7 +12,9 @@ from trading_agent.owner_runtime.auth import (
     Attempt,
     AuthError,
     OAuth,
+    _require_owner_identity,
     login,
+    owner_root,
 )
 from trading_agent.security.files import read_private_json
 
@@ -128,15 +131,45 @@ def test_callback_rejects_csrf_mixup_replay_expiry_and_owner_denial(part):
         attempt.accept(query)
 
 
-def test_coding_identity_is_denied_before_browser_or_auth_network(tmp_path, monkeypatch):
+def test_unapproved_identity_is_denied_before_browser_or_auth_network(tmp_path, monkeypatch):
     def forbidden(*args, **kwargs):
         raise AssertionError("auth/network/browser attempted")
 
     monkeypatch.setattr("trading_agent.owner_runtime.auth.webbrowser.open", forbidden)
     monkeypatch.setattr("trading_agent.owner_runtime.auth.httpx.Client", forbidden)
-    with pytest.raises(AuthError, match="separate runtime OS identity"):
+    monkeypatch.setenv("USER", "randygeszvain")
+    monkeypatch.setenv("LOGNAME", "randygeszvain")
+    monkeypatch.setattr(
+        "trading_agent.owner_runtime.auth.pwd.getpwuid",
+        lambda uid: SimpleNamespace(pw_name="unapproved-fixture-user"),
+    )
+    with pytest.raises(AuthError, match="approved local OS identity"):
         login(tmp_path / "not-created")
     assert not (tmp_path / "not-created").exists()
+
+
+@pytest.mark.parametrize("name", ["randygeszvain", "ai-trading-executor"])
+def test_approved_identity_still_cannot_store_credentials_in_checkout(name, tmp_path, monkeypatch):
+    monkeypatch.setattr(
+        "trading_agent.owner_runtime.auth.pwd.getpwuid",
+        lambda uid: SimpleNamespace(pw_name=name),
+    )
+    _require_owner_identity()
+    root = tmp_path / "checkout" / "private"
+    with pytest.raises(AuthError, match="outside the source checkout"):
+        owner_root(root, checkout=tmp_path / "checkout")
+    assert not root.exists()
+
+
+def test_approved_username_cannot_bypass_effective_uid_mismatch(monkeypatch):
+    monkeypatch.setattr(
+        "trading_agent.owner_runtime.auth.pwd.getpwuid",
+        lambda uid: SimpleNamespace(pw_name="randygeszvain"),
+    )
+    monkeypatch.setattr("trading_agent.owner_runtime.auth.os.getuid", lambda: 501)
+    monkeypatch.setattr("trading_agent.owner_runtime.auth.os.geteuid", lambda: 0)
+    with pytest.raises(AuthError, match="approved local OS identity"):
+        _require_owner_identity()
 
 
 def test_token_failure_never_echoes_credentials_or_persists_success(tmp_path):

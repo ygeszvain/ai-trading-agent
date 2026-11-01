@@ -133,7 +133,7 @@ The owner-reported USD 500 and balance-only preference are recorded in an
 `uv run trading-agent backtest run --config config/pilot500.simulation.yaml` for
 an offline feasibility fixture. It does not relax existing limits or trade real
 money. [Owner-runtime setup](docs/owner_runtime_setup.md) describes private,
-separately operated official OAuth/schema discovery; there is no live executor
+owner-operated official OAuth/schema discovery; there is no live executor
 or activation path in this release.
 
 ## License

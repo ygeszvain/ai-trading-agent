@@ -41,6 +41,8 @@ PROFILE: dict[str, Any] = {
     "token_endpoint_auth_methods_supported": ["none"],
     "authorization_response_iss_parameter_supported": True,
 }
+# Owner-approved local identities; never controlled by a model or environment flag.
+OWNER_RUNTIME_USERS = frozenset({"ai-trading-executor", "randygeszvain"})
 
 
 class AuthError(RuntimeError):
@@ -67,11 +69,18 @@ def _callback(url: str) -> None:
         raise AuthError("exact loopback callback required")
 
 
+def _require_owner_identity() -> None:
+    if (
+        os.getuid() != os.geteuid()
+        or pwd.getpwuid(os.getuid()).pw_name not in OWNER_RUNTIME_USERS
+    ):
+        raise AuthError("owner authentication requires an approved local OS identity")
+
+
 def owner_root(path: Path, *, checkout: Path | None = None) -> Path:
-    """Requires a separate OS identity. No environment switch bypasses this check."""
+    """Allow owner-approved identities while retaining private-path checks."""
+    _require_owner_identity()
     repository = checkout or Path(__file__).resolve().parents[3]
-    if pwd.getpwuid(os.getuid()).pw_name != "ai-trading-executor" or os.getuid() != os.geteuid():
-        raise AuthError("owner authentication requires a separate runtime OS identity")
     root = path.expanduser().absolute()
     if root.is_symlink() or root.resolve().is_relative_to(repository.resolve()):
         raise AuthError("runtime credential directory must be outside the source checkout")

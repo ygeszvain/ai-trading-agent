@@ -18,8 +18,12 @@ balance-only risk preference and a request for the best algorithm. These are in
 docs/pilot500_owner_request.unsigned.json, inactive and unverified; no best strategy
 is established, no risk widening or exact owner decisions are inferred.
 
-Official owner-auth/schema discovery is prepared for a separate required OS user
-only; docs/owner_runtime_setup.md describes the private operator steps. Coding
+The owner explicitly approved `randygeszvain` for owner-operated authentication
+on November 1, 2026; `ai-trading-executor` also remains allowed. This supersedes
+the separate-user authentication requirement only. Same-user filesystem permissions
+do not isolate credentials from coding processes. Private storage outside the
+checkout, ownership/mode/path checks, and all live-dispatch denials remain.
+See docs/owner_runtime_setup.md for the private operator steps. Coding
 must not authenticate, read real tokens or perform protected account/broker calls.
 No real login, live transport, owner signer/activation loader or deployed privilege
 isolation is certified. Current financial authority stays LIVE_NOT_AUTHORIZED.

@@ -1,9 +1,26 @@
 # Trading agent build status
 
-**Last updated:** 2026-11-01 (owner-selected offline stabilization and isolated auth preparation)
+**Last updated:** 2026-11-01 (owner-approved `randygeszvain` authentication exception)
 **Current financial authority:** LIVE_NOT_AUTHORIZED
 **Approved live capital:** 0 USD. Owner now reports USD 500 available in an Agentic account; unverified, unsigned and inactive. Earlier USD 1,000 worksheets remain historical.
-**Next dependency:** Owner-operated isolated OAuth/schema observation and external validation; no next numbered prompt or live activation path.
+**Next dependency:** Owner-operated private OAuth/schema observation and external validation; no next numbered prompt or live activation path.
+
+## Owner-approved authentication account exception
+
+The owner explicitly requested using `randygeszvain` for the private browser
+login. The identity guard now permits `randygeszvain` and `ai-trading-executor`;
+unapproved usernames and real/effective UID mismatch deny. Private 0700/0600
+storage, ownership, outside-checkout, symlink/ancestor protections, and existing
+OAuth/live-dispatch controls remain. Same-user permissions do not establish OS
+isolation. The coding agent did not run real login or read/create real credentials.
+
+Changed `owner_runtime/auth.py`, CLI error guidance, focused fake-only identity/
+credential-boundary tests, owner setup and current boundary/status documentation.
+Verification: `uv run pytest -q -rs tests/stabilization/test_owner_auth.py tests/security/test_boundaries.py` — **35 passed, 4 skipped** (the four PostgreSQL cases require the dedicated disposable review DB); `uv run ruff check src tests` — PASS; `uv run mypy` — PASS, 124 source files. Results retained locally in `.data/stabilization/evidence/owner-account-exception.txt`. The earlier 325-test full review
+below remains evidence for its original snapshot. No database or broker integration
+was rerun for this narrow guard change; actual OAuth acceptance remains
+EXTERNAL_VALIDATION_PENDING. The numbered pack ends at 12 and authority remains
+LIVE_NOT_AUTHORIZED.
 
 ## Post-prompt offline repairs and USD 500 request
 
