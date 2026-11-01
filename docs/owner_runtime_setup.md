@@ -7,6 +7,12 @@ Read the [repair report](stabilization_and_auth_readiness.md) and current
 [build status](build_status.md) first. No financial-account authentication has
 been performed by the coding agent.
 
+For operation through this Codex chat, the existing native Robinhood connection
+has passed an owner-approved three-read check. It is separate from the local
+OAuth client below. You do not need to paste credentials or copy tokens between
+connections. Follow [the interactive operator guide](codex_operation.md) for chat
+checks; local OAuth setup remains relevant only to the independent application.
+
 ## 1. Use an approved local account
 
 The owner explicitly approved using **`randygeszvain`** on November 1, 2026.

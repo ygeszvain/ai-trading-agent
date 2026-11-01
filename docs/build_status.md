@@ -1,9 +1,33 @@
 # Trading agent build status
 
-**Last updated:** 2026-11-01 (owner-approved `randygeszvain` authentication exception)
+**Last updated:** 2026-11-01 (interactive Codex operator workflow; live disabled)
 **Current financial authority:** LIVE_NOT_AUTHORIZED
-**Approved live capital:** 0 USD. Owner now reports USD 500 available in an Agentic account; unverified, unsigned and inactive. Earlier USD 1,000 worksheets remain historical.
-**Next dependency:** Owner-operated private OAuth/schema observation and external validation; no next numbered prompt or live activation path.
+**Approved live capital:** 0 USD. The original USD 500 owner request remains unsigned and inactive; current private native-read observations are excluded from public evidence. Earlier USD 1,000 worksheets remain historical.
+**Next dependency:** Local gateway/account-scoped normalization, reconciliation and external validation; the native Codex read-only check passed, with no next numbered prompt or live activation path.
+
+## Interactive Codex operator workflow
+
+The owner selected this chat for interactive operation and Robinhood integration
+readiness as the first workflow. Added [the operator guide](codex_operation.md),
+project interaction instructions and README entry. Reused existing commands:
+`uv run trading-agent status --config config/pilot500.simulation.yaml` and
+`uv run trading-agent check-config --config config/pilot500.simulation.yaml`
+both pass, reporting simulation/simulator, live disabled, synthetic data only,
+and LIVE_NOT_AUTHORIZED. Documentation-only checks use `git diff --check`.
+No new business logic or test suite is needed for this operator-instruction change.
+
+After preparation, the owner explicitly approved one three-read native Codex
+check: accessible account, portfolio and trade-approval setting. All three
+completed successfully with active/account-bound responses. This is real native
+connector read evidence, not mocked or local-app transport evidence. Private
+financial values, account identifiers and settings observations are excluded
+from repository evidence. The internal identifier was discarded after the reads.
+The single-check permission is consumed; no ongoing monitoring is authorized.
+No token/credential-file access, financial write, new connection, service,
+schedule or alert occurred. The local gateway remains quarantined and real
+execution/authorization/monitoring and investment evidence remain pending.
+Previous software results retain their own scope. No next numbered prompt or
+live authority is granted.
 
 ## Owner-approved authentication account exception
 

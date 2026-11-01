@@ -87,6 +87,15 @@ Do not publish the application server, expose a tunnel, or connect a financial
 account as part of this quick start. Publishing this source repository does not
 activate trading or deploy a service.
 
+## Operate through the Codex chat
+
+Use natural-language requests for readiness, blockers, research and simulation.
+Codex asks for missing non-secret decisions here and runs authorized existing
+commands. The owner selected Robinhood integration readiness first. The
+[interactive operator guide](docs/codex_operation.md) distinguishes native app
+connection checks from local gateway readiness and actual financial authority.
+Credentials stay out of chat; live trading remains unavailable.
+
 ## Development and contribution
 
 ```bash

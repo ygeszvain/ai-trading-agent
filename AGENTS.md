@@ -28,6 +28,23 @@ must not authenticate, read real tokens or perform protected account/broker call
 No real login, live transport, owner signer/activation loader or deployed privilege
 isolation is certified. Current financial authority stays LIVE_NOT_AUTHORIZED.
 
+## Owner-selected interactive Codex operation — November 1, 2026
+
+Use this chat as the operator interface for status, research, simulations and
+readiness. Ask concise non-secret questions here when material information is
+missing, retain recorded answers, and continue independent authorized work while
+waiting. The owner selected Robinhood integration readiness first. See
+`docs/codex_operation.md` for the prepared native read-only check and evidence
+boundaries. Native Robinhood tools being available does not verify connection
+or integrate them with the project executor. The owner explicitly approved and
+completed one native three-read readiness check: accessible account, portfolio and trade-approval setting. That one-check
+exception is consumed. It did not grant ongoing monitoring or further account
+reads. Keep raw identifiers/private broker observations out of source, fixtures
+and logs; use identifiers internally only to scope approved reads. The base
+protected-call prohibition remains outside an explicit owner request/exception.
+No real credential reads or financial writes are inferred. Do not make the chat
+the unattended engine or create schedules/alerts/deployments under this request.
+
 ## Publication scope — November 1, 2026
 
 The owner explicitly authorized open source publication to
