@@ -114,7 +114,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     window.location.assign(url);
   });
   const page = document.body.dataset.page;
-  if (page !== "login" && page !== "learning" && page !== "readiness") {
+  if (!["login", "learning", "readiness", "autonomy"].includes(page)) {
     try {
       const listed = runSel ? await TA.loadRuns(runSel) : (await TA.api("/api/v1/runs")).payload.runs;
       const url = new URL(window.location.href);
@@ -130,7 +130,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const url = new URL(anchor.href, window.location.origin);
     const run = new URLSearchParams(window.location.search).get("run_id");
     if (run && url.origin === window.location.origin && !url.pathname.startsWith("/auth/")
-        && url.pathname !== "/learning" && url.pathname !== "/readiness") { url.searchParams.set("run_id", run); anchor.href = url; }
+        && !["/learning", "/readiness", "/autonomy"].includes(url.pathname)) { url.searchParams.set("run_id", run); anchor.href = url; }
   });
 
   if (page === "overview") {

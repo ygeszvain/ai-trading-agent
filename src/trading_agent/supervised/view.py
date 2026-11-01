@@ -18,6 +18,20 @@ from .readiness import GATE_NAMES, evaluate
 
 
 def safe_audit(value: Any, field: str = "") -> Any:
+    # Preserve key context before recursing into diagnostic values.
+    if field.lower() in {
+        "authorization",
+        "access_token",
+        "refresh_token",
+        "owner_token",
+        "session_secret",
+        "account_number",
+        "api_key",
+        "password",
+        "secret",
+        "token",
+    }:
+        return "[REDACTED]"
     # Exact public content hashes and typed money are audit bindings, not secrets.
     if isinstance(value, dict):
         return {k: safe_audit(v, str(k)) for k, v in value.items()}

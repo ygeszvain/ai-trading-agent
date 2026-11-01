@@ -178,7 +178,10 @@ def evaluate(
             put("not_revoked", not state.revoked, "durable revocation epoch checked independently")
             if intent is not None:
                 binding = (
-                    intent.account_key == state.account_key
+                    intent.domain == "M6_MOCK_ONLY"
+                    and state.domain == "M6_MOCK_ONLY"
+                    and intent.mode == config.app.mode.value
+                    and intent.account_key == state.account_key
                     and intent.account_alias == state.account_alias
                     and intent.run_id == state.run_id
                     and intent.instrument == q.instrument

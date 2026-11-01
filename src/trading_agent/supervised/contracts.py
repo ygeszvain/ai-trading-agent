@@ -49,12 +49,12 @@ class Record(BaseModel):
 
 
 class Intent(Record):
-    domain: Literal["M6_MOCK_ONLY"] = "M6_MOCK_ONLY"
+    domain: Literal["M6_MOCK_ONLY", "M7_MOCK_ONLY"] = "M6_MOCK_ONLY"
     intent_id: Identifier
     run_id: Identifier
     account_alias: Identifier
     account_key: Digest  # exact protected-runtime identity fingerprint, never an account number
-    mode: Literal["supervised_live"] = "supervised_live"
+    mode: Literal["supervised_live", "bounded_autonomous_live"] = "supervised_live"
     instrument: Identifier
     side: Literal["buy", "sell"]
     quantity: Positive
@@ -177,7 +177,7 @@ class StrategyManifest(Record):
 
 
 class State(Record):
-    domain: Literal["M6_MOCK_ONLY"] = "M6_MOCK_ONLY"
+    domain: Literal["M6_MOCK_ONLY", "M7_MOCK_ONLY"] = "M6_MOCK_ONLY"
     account_alias: Identifier
     account_key: Digest
     observed_account_key: Digest
@@ -286,3 +286,10 @@ class Readiness(Record):
     actual_dispatch_allowed: Literal[False] = False
     mock_controls_satisfied: bool
     checks: tuple[Check, ...]
+
+
+class Permit(Record):
+    """An execution-side check result, never an issued owner authorization."""
+
+    authorization_hash: Digest
+    report: Readiness

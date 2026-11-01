@@ -14,15 +14,13 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.engine import Connection
 
-from ..db.schema import m6_approvals as approvals
-from ..db.schema import m6_fills as fills
-from ..db.schema import m6_orders as orders
 from .contracts import (
     Approval,
     Fill,
     Holding,
     Intent,
     Order,
+    Permit,
     Resume,
     Signed,
     State,
@@ -61,7 +59,7 @@ class MockControls:
             if not report.mock_controls_satisfied:
                 raise Denied("approval prerequisites not met")
             conn.execute(
-                approvals.insert().values(
+                self.journal.approvals.insert().values(
                     approval_id=approval.approval_id,
                     account_key=state.account_key,
                     intent_hash=intent.digest(),
@@ -84,12 +82,17 @@ class MockControls:
     def revoke(self, key: str, *, now: datetime, approval_id: str | None = None) -> None:
         with self.journal.transaction() as conn:
             state = self.journal.state(conn, key)
+            if state.domain != "M6_MOCK_ONLY":
+                raise Denied("M6 controls cannot address another authority domain")
             before = state
             if approval_id is not None:
                 self.journal.approval(conn, key, approval_id)
                 conn.execute(
-                    approvals.update()
-                    .where(approvals.c.account_key == key, approvals.c.approval_id == approval_id)
+                    self.journal.approvals.update()
+                    .where(
+                        self.journal.approvals.c.account_key == key,
+                        self.journal.approvals.c.approval_id == approval_id,
+                    )
                     .values(revoked=True)
                 )
             else:
@@ -113,6 +116,8 @@ class MockControls:
     def pause(self, key: str, *, now: datetime, shutdown: bool = False) -> None:
         with self.journal.transaction() as conn:
             state = self.journal.state(conn, key)
+            if state.domain != "M6_MOCK_ONLY":
+                raise Denied("M6 controls cannot address another authority domain")
             state = self.journal.save(conn, state.changed(paused=True, resumed=False))
             self.journal.event(
                 conn,
@@ -148,7 +153,7 @@ class MockControls:
             if any(not c.satisfied for c in report.checks if c.name not in skip):
                 raise Denied("resume prerequisites not met")
             conn.execute(
-                approvals.insert().values(
+                self.journal.approvals.insert().values(
                     approval_id=request.resume_id,
                     account_key=state.account_key,
                     intent_hash=request.digest(),
@@ -222,6 +227,41 @@ class MockExecutor:
         if self._failed:
             raise Denied("executor audit/state failed; restart and reconcile before reuse")
 
+    def _authorize(
+        self,
+        conn: Connection,
+        state: State,
+        intent: Intent,
+        reference: str,
+        *,
+        now: datetime,
+        consumed: bool,
+        excluding_cash: Decimal = Decimal(0),
+        excluding_entry: int = 0,
+        excluding_turnover: Decimal = Decimal(0),
+    ) -> Permit:
+        proof, was_consumed, revoked = self.journal.approval(conn, state.account_key, reference)
+        approval = verify(proof, Approval)
+        report = evaluate(
+            state,
+            now=now,
+            intent=intent,
+            approval=approval,
+            excluding_cash=excluding_cash,
+            excluding_entry=excluding_entry,
+            excluding_turnover=excluding_turnover,
+        )
+        if was_consumed != consumed or revoked or not report.mock_controls_satisfied:
+            raise Denied("dispatch consent, replay or readiness check denied")
+        return Permit(authorization_hash=approval.authorization_hash, report=report)
+
+    def _consume(self, conn: Connection, state: State, reference: str) -> None:
+        conn.execute(
+            self.journal.approvals.update()
+            .where(self.journal.approvals.c.approval_id == reference)
+            .values(consumed=True)
+        )
+
     @money_context
     def reserve(self, intent: Intent, approval_id: str, *, now: datetime) -> Order:
         self._check_instance()
@@ -230,17 +270,11 @@ class MockExecutor:
             self._assert_fence(state)
             if state.boot_id != self.boot_id or intent.account_key != self.transport.account_key:
                 raise Denied("stale executor or account mismatch")
-            proof, consumed, revoked = self.journal.approval(conn, state.account_key, approval_id)
-            approval = verify(proof, Approval)
-            report = evaluate(state, now=now, intent=intent, approval=approval)
+            permit = self._authorize(conn, state, intent, approval_id, now=now, consumed=False)
+            report = permit.report
             other = self.journal.account_orders(conn, state.account_key)
-            if (
-                consumed
-                or revoked
-                or not report.mock_controls_satisfied
-                or any(o.status in UNCERTAIN for o in other)
-            ):
-                raise Denied("dispatch prerequisites, approval replay or reconciliation blocker")
+            if any(o.status in UNCERTAIN for o in other):
+                raise Denied("reconciliation blocker")
             if any(o.intent.intent_id == intent.intent_id for o in other):
                 raise Denied("local intent already attempted; never automatically retry")
             if intent.side == "sell":
@@ -279,7 +313,7 @@ class MockExecutor:
             order = Order(
                 intent=intent,
                 approval_id=approval_id,
-                authorization_hash=approval.authorization_hash,
+                authorization_hash=permit.authorization_hash,
                 epoch=state.epoch,
                 boot_id=self.boot_id,
                 status="submission_pending",
@@ -289,18 +323,14 @@ class MockExecutor:
                 executor_generation=state.executor_generation,
             )
             conn.execute(
-                orders.insert().values(
+                self.journal.orders.insert().values(
                     intent_id=intent.intent_id,
                     account_key=state.account_key,
                     approval_id=approval_id,
                     document=order.model_dump_json(),
                 )
             )
-            conn.execute(
-                approvals.update()
-                .where(approvals.c.approval_id == approval_id)
-                .values(consumed=True)
-            )
+            self._consume(conn, state, approval_id)
             self.journal.event(
                 conn,
                 state,
@@ -325,21 +355,20 @@ class MockExecutor:
                 state = self.journal.state(conn, key)
                 self._assert_fence(state)
                 order = self.journal.order(conn, intent_id, key)
-                proof, consumed, revoked = self.journal.approval(conn, key, order.approval_id)
-                approval = verify(proof, Approval)
-                report = evaluate(
+                permit = self._authorize(
+                    conn,
                     state,
+                    order.intent,
+                    order.approval_id,
                     now=now,
-                    intent=order.intent,
-                    approval=approval,
+                    consumed=True,
                     excluding_cash=order.reserved_cash,
                     excluding_entry=1 if order.intent.side == "buy" else 0,
                     excluding_turnover=order.intent.quantity * order.intent.price_upper,
                 )
+                report = permit.report
                 if (
-                    revoked
-                    or not consumed
-                    or not report.mock_controls_satisfied
+                    order.authorization_hash != permit.authorization_hash
                     or order.dispatch_started
                     or order.status != "submission_pending"
                     or order.boot_id != self.boot_id
@@ -367,23 +396,22 @@ class MockExecutor:
             with self.journal.transaction() as conn:
                 current = self.journal.state(conn, key)
                 self._assert_fence(current)
-                signed, consumed, revoked = self.journal.approval(conn, key, order.approval_id)
                 clock_now = self.clock()
-                report = evaluate(
+                permit = self._authorize(
+                    conn,
                     current,
+                    order.intent,
+                    order.approval_id,
                     now=clock_now,
-                    intent=order.intent,
-                    approval=verify(signed, Approval),
+                    consumed=True,
                     excluding_cash=order.reserved_cash,
                     excluding_entry=1 if order.intent.side == "buy" else 0,
                     excluding_turnover=order.intent.quantity * order.intent.price_upper,
                 )
+                report = permit.report
                 if (
-                    revoked
-                    or not consumed
-                    or not report.mock_controls_satisfied
-                    or current.boot_id != self.boot_id
-                    or current.epoch != order.epoch
+                    current.epoch != order.epoch
+                    or permit.authorization_hash != order.authorization_hash
                 ):
                     raise Denied("final locked wire check denied")
                 self.journal.event(
@@ -411,7 +439,9 @@ class MockExecutor:
         self, conn: Connection, state: State, order: Order, fill: Fill, now: datetime
     ) -> tuple[State, Order]:
         previous = conn.execute(
-            select(fills.c.document).where(fills.c.fill_id == fill.fill_id)
+            select(self.journal.fills.c.document).where(
+                self.journal.fills.c.fill_id == fill.fill_id
+            )
         ).scalar_one_or_none()
         if previous is not None:
             if Fill.model_validate_json(previous) != fill:
@@ -491,7 +521,7 @@ class MockExecutor:
             resumed=False,
         )
         conn.execute(
-            fills.insert().values(
+            self.journal.fills.insert().values(
                 fill_id=fill.fill_id,
                 account_key=state.account_key,
                 order_id=intent.intent_id,
@@ -671,7 +701,7 @@ class MockExecutor:
                 raise Denied("cancellation scope, consent or state invalid")
             # unique approval id makes cancel replay fail before another transport call
             conn.execute(
-                approvals.insert().values(
+                self.journal.approvals.insert().values(
                     approval_id=request.approval_id,
                     account_key=key,
                     intent_hash=expected,

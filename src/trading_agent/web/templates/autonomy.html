@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% set page = "autonomy" %}
+{% block content %}
+<h1>Bounded autonomy — LIVE_NOT_AUTHORIZED</h1>
+<p>Read-only owner review. Actual approved capital: USD {{ view.runtime_approved_capital_usd }}. Automatic change class: {{ view.automatic_change_class }}.</p>
+<p>Integration: {{ view.integration_evidence }} · Investment: {{ view.investment_evidence }}. Software completion does not establish an investable edge.</p>
+<fieldset disabled aria-label="Unavailable autonomy controls"><legend>Actual live controls unavailable</legend><button>Activate</button><button>Renew authority</button><button>Resume</button><button>Promote</button></fieldset>
+<details><summary>Unsigned owner review — {{ view.package.status }}</summary><pre>{{ view.package | tojson(indent=2) }}</pre></details>
+{% if view.mock %}
+<h2>{{ view.mock.label }}</h2>
+<p>Scope: {{ view.mock.scope.account_alias }} / {{ view.mock.scope.run_id }} / simulation. As of {{ view.as_of }}.</p>
+<p>Envelope current: {{ view.mock.envelope_current }} · Revoked: {{ view.mock.revoked }} · Paused: {{ view.mock.paused }} · Resumed: {{ view.mock.resumed }} · Independent monitor current: {{ view.mock.monitor_current }}.</p>
+<p>Mock cash {{ view.mock.cash }} · Reserved {{ view.mock.reserved_cash }} · Persistent high-water mark {{ view.mock.high_water_mark }}.</p>
+<h2>What learning changes</h2><p>{{ view.mock.learning_changes }} Refresh and preferences cannot renew or widen authority.</p>
+<h2>Frozen champion and exact artifact bindings</h2><p>{{ view.mock.champion_hash }}</p><pre>{{ view.mock.champion | tojson(indent=2) }}</pre>
+<h2>Synthetic envelope / expiry / permissions</h2><p>{{ view.mock.envelope_hash }}</p><pre>{{ view.mock.envelope | tojson(indent=2) }}</pre>
+<h2>Independent health and local escalation</h2><p>Local fixture notices are QUEUED_LOCAL_NOT_SENT. No human alert delivery has been verified. Disconnection prevents new exposure; it cannot guarantee broker-side cancellation.</p><pre>{{ view.mock.health | tojson(indent=2) }}</pre><pre>{{ view.mock.monitor | tojson(indent=2) }}</pre>
+{% for incident in view.incidents %}<details open><summary>Incident — {{ incident.reason }}</summary><pre>{{ incident | tojson(indent=2) }}</pre></details>{% endfor %}
+<h2>Promotion, rollback and owner command history</h2>{% for event in view.history %}<details><summary>{{ event.kind }}</summary><pre>{{ event | tojson(indent=2) }}</pre></details>{% endfor %}
+<h2>Exact intents — shared envelope, zero per-intent application approvals</h2>{% for order in view.orders %}<details><summary>{{ order.intent.intent_id }} — {{ order.status }}</summary><pre>{{ order | tojson(indent=2) }}</pre></details>{% endfor %}
+<h2>Denied state changes and audit trail</h2><p>Coverage is bounded to 100 rows per collection; audit shows latest events.</p><pre>{{ view.coverage | tojson(indent=2) }}</pre>{% for event in view.audit %}<details><summary>{{ event.sequence }} · {{ event.event_type }} · {{ event.at }}</summary><pre>{{ event.payload | tojson(indent=2) }}</pre></details>{% endfor %}
+{% else %}<p>No scoped synthetic journal selected. Missing evidence is not readiness.</p>{% endif %}
+{% endblock %}

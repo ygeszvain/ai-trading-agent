@@ -41,6 +41,19 @@ service. Real dispatch, credential injection, separate deployed OS privileges,
 monitoring and broker authorization remain unavailable. An unsigned owner
 worksheet cannot activate anything. The prior schema/readiness failures remain.
 
+## M7 synthetic envelope boundary — November 1
+
+The [M7 report](bounded_autonomy_readiness.md) documents the expiring immutable
+envelope, frozen artifacts and source checks, monitor child, independent local
+pause, incident acknowledgement, exact owner resume and protected rollback.
+M7 reuses table-scoped M6 accounting/reservation mechanics with a separate
+envelope authorization hook; M6 approvals cannot authorize M7 actions. Monitor
+evidence is ingested after revocation, but execution denies. Fixture owner and
+monitor HMAC keys are public test data, not real identities. OS separation,
+runtime attestation, secrets and channel delivery remain external dependencies.
+Research gets an immutable read view. Promotion can prepare reviews only; the
+executable automatic class remains NONE. Real dispatch is unavailable.
+
 ## 1. Product shape and trust planes
 
 One owner, one local installation, one dedicated trading account. The system

@@ -1,9 +1,94 @@
 # Trading agent build status
 
-**Last updated:** 2026-11-01 (Prompt 11 mock supervised-readiness controls; historical evidence retained)
+**Last updated:** 2026-11-01 (Prompt 12 disabled bounded-autonomy controls; historical evidence retained)
 **Current financial authority:** LIVE_NOT_AUTHORIZED
 **Approved live capital:** 0 USD (requested USD 1,000 pilot: recorded, activation pending — plan section 24)
-**Next numbered task:** Prompt 12 only if selected — actual live readiness remains blocked
+**Next dependency:** Owner review and upstream repairs; the numbered pack ends at Prompt 12. Actual live readiness remains blocked.
+
+## Prompt 12 — Bounded-autonomy readiness, without activation (M7/M8 controls)
+
+Implemented the explicitly selected offline scope on
+`codex/bounded-autonomy-readiness`. **Real readiness remains BLOCKED / LIVE_NOT_AUTHORIZED**.
+See the [report, evidence matrix and runbook](bounded_autonomy_readiness.md) and
+[unsigned owner review](bounded_autonomy_owner_review.unsigned.json). Existing
+M0–M5 acceptance gaps are not passed by later software controls.
+
+### What works
+
+- Versioned, immutable synthetic envelope; exact account/capital/one-fictional-
+  asset, champion/model/prompt/configuration/risk/schema/permission/session/
+  overnight/monitor/start/expiry/rollback bindings. Frozen research read view,
+  no issue/renew/widen/replace path and no real owner signing/authorization.
+- Sealed source/dependency-lock/parameter/feature/model/prompt/memory-policy
+  artifacts and execution-side verification. M6 transactional reservations,
+  audit/attempt/fill accounting and monotonic worker fencing reused under M7
+  tables with a distinct envelope permit; M6 per-intent behavior preserved.
+- Fail-closed stale/unknown/schema/permission/audit/policy/expiry controls,
+  independent read-only monitor process, incident/local notice persistence,
+  independent local pause, signed fixture acknowledgement and explicit resume.
+  No automatic restart, incident recovery or renewal; HWM/loss history retained.
+- Limited preapproved protective cancellation with durable attempt, final
+  revalidation and retained reserves. Same-champion backup rollback preserves
+  failed primary evidence. No real cancellation or liquidation.
+- M8 automatic class NONE. Separate bounded owner-fixture mandate can prepare
+  evidence reviews only; hidden trials/diffs and inadequate evidence reject.
+  Even adequate synthetic evidence cannot change the active champion/envelope.
+- Authenticated read-only `/autonomy` and `/api/v1/autonomy`; exact bindings,
+  expiry, health, local notices, denials and promotion/rollback history. All
+  control POSTs deny, no model/broker/issuer construction or journal writes.
+- Fixed diagnostic key-redaction context, backwards session resets, duplicate
+  working fixture orders, pre-wire protection checks, revoked monitoring access,
+  cross-domain controls and SQLite response snapshot consistency.
+- Nine additive M7 migration tables. Prior incompatible schema remains blocked.
+
+### Exact commands and actual results
+
+| Offline command / check | Actual result |
+| --- | --- |
+| `uv run trading-agent autonomy package` | UNSIGNED_BLOCKED; capital 0, no signature/real envelope/activation loader, class NONE |
+| `uv run trading-agent autonomy demo --out-dir .data/m7-review` | CODE_PASS for synthetic harness: 3 sessions, 6 fills, 1 initial owner resume, 0 per-intent app approvals; cash 999.94, reserves 0.00, HWM 1000; separate monitor PIDs; expiry/expansion/prompt promotion denied; final paused |
+| Dedicated M6/M7 review URLs + `uv run pytest -q tests/autonomy tests/supervised` | **136 passed**, 1 existing deprecation warning; includes disposable PostgreSQL lock/shared-envelope/fencing tests; final full run also passes the latched-worker resume assertion |
+| Three dedicated review URLs + `uv run pytest -q` | **292 passed, 3 failed**, 1 warning; preserved regime/whipsaw/fold-edge economic assertions |
+| `uv run ruff check src/trading_agent/autonomy src/trading_agent/supervised tests/autonomy src/trading_agent/db/schema.py src/trading_agent/web/app.py src/trading_agent/cli/main.py` | PASS |
+| `uv run mypy --follow-imports=silent -p trading_agent.autonomy -p trading_agent.supervised` | PASS, 24 source files; broader imported errors excluded from scoped result |
+| `uv run ruff check src tests` / `uv run mypy` | FAIL: 61 existing Ruff findings; 122 existing type errors in 24 files, 121 source files checked |
+| `uv run python -m compileall -q src tests/autonomy`; `node --check src/trading_agent/web/static/app.js`; `node --check tests/autonomy/browser_checks.js` | PASS |
+| Alembic on disposable `m7_migrations`: upgrade, inspect 9 M7 tables, downgrade to `d8c302b4a611`, re-upgrade | PASS, new head `e71a4c09d522`; unrelated witness preserved; global schema verification still BLOCKED on earlier gaps |
+| Playwright fixture `/autonomy` with persisted synthetic journal | PASS desktop 1440px and narrow 390px, exact envelope/champion, paused/expired labels, six fills, six denied control POSTs, no journal writes in API test, 0 page exceptions/0 external requests; one local favicon 404 |
+| Repository-only credential pattern scan; checked-in configuration review | 218 paths; only finding is the existing `user:pass` URL rejection fixture; no real credential detected. Simulation/pilot retain disabled live, zero capital and no cloud fallback; inactive live template correctly rejects startup |
+
+Review DBs were `review`, `m6_review`, `m7_review`, and `m7_migrations` in a new
+`postgres:17` container named `trading-agent-m7-review` at `127.0.0.1:55433`.
+No existing service/account was probed. Exact environment bindings and browser
+commands are documented in the report. Ignored `.data/m7-review/evidence/`
+preserves intermediate failures and final results; screenshots are under
+`output/playwright/m7-autonomy-*.png`. Only the owned fixture server/browser/
+container were used and stopped after review.
+
+### Unresolved dependencies and stop boundary
+
+Overall readiness remains FAIL/BLOCKED. Earlier schema, integrated recovery and
+economic defects remain. Independent OS privileges, protected runtime secrets,
+actual broker permissions/approval/revocation semantics, independent monitor/
+stop availability, alert delivery, backup/restore, and prospective operational
+and investment evidence are EXTERNAL_VALIDATION_PENDING. Public fixture HMAC
+keys and different PIDs are not real owner/monitor identities or an OS sandbox.
+The local notice queue explicitly reports QUEUED_LOCAL_NOT_SENT. Same-user
+mutable runtime and installed dependency attestation are not certified.
+
+Owner account/capital/universe/overnight/limits/duration/monitoring/observation/
+recovery decisions remain unsigned. No credentials, real accounts, gateway
+mutations, external alerts, promotion, activation, renewal, funding, deployment,
+push or merge were used for Prompt 12. The numbered prompt pack has no next
+numbered prompt: stop for owner review and separately scoped upstream repairs.
+
+### Changed files
+
+`src/trading_agent/autonomy/` (13 modules), M7 schema/migration,
+`tests/autonomy/`, M6 contracts/journal/permit hook/domain and redaction checks,
+web routes/template/navigation/style/read transactions, CLI demo/package,
+`docs/bounded_autonomy_*`, README, SETUP, architecture, website, AGENTS and this
+status. Checked-in live defaults remain disabled/zero.
 
 ## Prompt 11 — Supervised-live readiness, without activation (M6 controls)
 
@@ -373,14 +458,15 @@ None of these block Prompt 2's offline work.
 | 9 | Controlled learning in research | **Offline research scope implemented 2026-11-01**; evidence above, real prospective integration pending |
 | 10 | Security and failure-readiness review | **Review complete 2026-11-01**; concrete fixes/tests and matrix recorded; overall readiness FAIL |
 | 11 | Supervised-live readiness; activation disabled (M6) | **Mock control scope implemented 2026-11-01**; actual readiness BLOCKED |
-| 12 | Bounded-autonomy readiness; activation disabled (M7/M8) | Pending |
+| 12 | Bounded-autonomy readiness; activation disabled (M7/M8) | **Offline control scope implemented 2026-11-01**; real readiness BLOCKED, automatic class NONE |
 
 ## Next action
 
-Prompt 11 stops with reviewed control code, mocked verification, an unsigned
-package and owner/integration dependencies. Prompt 12 is next only when
-explicitly selected. Resolve earlier schema, integrated recovery, economic and
-monitoring failures before any real readiness claim. No account linking,
-funding, promotion, production deployment or trading is authorized.
+Prompt 12 stops with disabled control code, synthetic verification, an unsigned
+owner package and activation prerequisites. The numbered prompt pack ends here.
+Resolve earlier schema, integrated recovery, economic and monitoring failures
+under a separately selected repair scope before any real readiness claim. No
+account linking, funding, promotion, activation, automatic renewal, production
+deployment or trading is authorized.
 
 Current financial authority: **LIVE_NOT_AUTHORIZED**.

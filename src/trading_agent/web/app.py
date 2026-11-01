@@ -130,6 +130,9 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
             if engine.dialect.name == "postgresql":
                 session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
                 session.execute(text("SET TRANSACTION READ ONLY"))
+            elif engine.dialect.name == "sqlite":
+                # SQLite's legacy driver does not BEGIN for SELECT. Pin this read snapshot.
+                session.connection().exec_driver_sql("BEGIN")
             yield session
         finally:
             session.close()
@@ -310,6 +313,42 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
         raise HTTPException(
             status_code=403, detail="LIVE_NOT_AUTHORIZED: actual live controls unavailable"
         )
+
+    @app.get("/autonomy", response_class=HTMLResponse)
+    async def page_autonomy(
+        request: Request, session: Session = SessionDep, run_id: str | None = None
+    ) -> Response:
+        from ..autonomy.view import project
+
+        require_auth(request)
+        try:
+            view = project(session.connection(), config, now=datetime.now(UTC), run_id=run_id)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=503, detail="Synthetic evidence integrity failure"
+            ) from error
+        return templates.TemplateResponse(
+            request=request, name="autonomy.html", context={**base_ctx, "view": view}
+        )
+
+    @app.get("/api/v1/autonomy")
+    async def api_autonomy(
+        request: Request, session: Session = SessionDep, run_id: str | None = None
+    ) -> dict[str, Any]:
+        from ..autonomy.view import project
+
+        require_auth(request)
+        try:
+            return project(session.connection(), config, now=datetime.now(UTC), run_id=run_id)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=503, detail="Synthetic evidence integrity failure"
+            ) from error
+
+    @app.post("/api/v1/autonomy/{action}")
+    async def denied_autonomy_control(request: Request, action: str) -> Response:
+        require_auth(request)
+        raise HTTPException(status_code=403, detail="LIVE_NOT_AUTHORIZED: controls unavailable")
 
     # --------------------------------------------------------------- api
 

@@ -582,3 +582,83 @@ m6_audit = Table(
     Column("payload", Text, nullable=False),
 )
 M6_TABLES = (m6_accounts, m6_approvals, m6_orders, m6_fills, m6_audit)
+
+
+# M7 shares accounting contracts, not M6 per-intent approval authority.
+def _m7_journal_tables() -> tuple[Table, ...]:
+    account = Table(
+        "m7_accounts",
+        metadata,
+        Column("account_key", String(64), primary_key=True),
+        Column("document", Text, nullable=False),
+    )
+    envelope = Table(
+        "m7_envelopes",
+        metadata,
+        Column("approval_id", String(96), primary_key=True),
+        Column("account_key", String(64), ForeignKey("m7_accounts.account_key"), nullable=False),
+        Column("intent_hash", String(64), unique=True, nullable=False),
+        Column("document", Text, nullable=False),
+        Column("consumed", Boolean, nullable=False),
+        Column("revoked", Boolean, nullable=False),
+    )
+    order = Table(
+        "m7_orders",
+        metadata,
+        Column("intent_id", String(96), primary_key=True),
+        Column("account_key", String(64), ForeignKey("m7_accounts.account_key"), nullable=False),
+        Column("approval_id", String(96), ForeignKey("m7_envelopes.approval_id"), nullable=False),
+        Column("document", Text, nullable=False),
+    )
+    fill = Table(
+        "m7_fills",
+        metadata,
+        Column("fill_id", String(96), primary_key=True),
+        Column("account_key", String(64), ForeignKey("m7_accounts.account_key"), nullable=False),
+        Column("order_id", String(96), ForeignKey("m7_orders.intent_id"), nullable=False),
+        Column("document", Text, nullable=False),
+    )
+    event = Table(
+        "m7_audit",
+        metadata,
+        Column("sequence", Integer, primary_key=True, autoincrement=True),
+        Column("account_key", String(64), ForeignKey("m7_accounts.account_key"), nullable=False),
+        Column("run_id", String(96), nullable=False),
+        Column("at", String(40), nullable=False),
+        Column("event_type", String(64), nullable=False),
+        Column("payload", Text, nullable=False),
+    )
+    return account, envelope, order, fill, event
+
+
+M7_TABLES = _m7_journal_tables()
+m7_accounts, m7_envelopes, m7_orders, m7_fills, m7_audit = M7_TABLES
+m7_runtime = Table(
+    "m7_runtime",
+    metadata,
+    Column("account_key", String(64), ForeignKey("m7_accounts.account_key"), primary_key=True),
+    Column("document", Text, nullable=False),
+)
+m7_monitor = Table(
+    "m7_monitor",
+    metadata,
+    Column("account_key", String(64), ForeignKey("m7_accounts.account_key"), primary_key=True),
+    Column("document", Text, nullable=False),
+)
+m7_notices = Table(
+    "m7_notices",
+    metadata,
+    Column("incident_hash", String(64), primary_key=True),
+    Column("account_key", String(64), ForeignKey("m7_accounts.account_key"), nullable=False),
+    Column("document", Text, nullable=False),
+    Column("acknowledged", Boolean, nullable=False),
+)
+m7_changes = Table(
+    "m7_changes",
+    metadata,
+    Column("change_id", String(64), primary_key=True),
+    Column("account_key", String(64), ForeignKey("m7_accounts.account_key"), nullable=False),
+    Column("kind", String(32), nullable=False),
+    Column("document", Text, nullable=False),
+)
+M7_ALL_TABLES = (*M7_TABLES, m7_runtime, m7_monitor, m7_notices, m7_changes)

@@ -466,6 +466,16 @@ def build_parser() -> argparse.ArgumentParser:
     demo_parser.add_argument("--out-dir", default=None, help="local research artifact directory")
     demo_parser.set_defaults(func=_run_learning_demo)
 
+    autonomy_parser = subparsers.add_parser(
+        "autonomy", help="M7 offline synthetic envelope demo and unsigned owner review"
+    )
+    autonomy_sub = autonomy_parser.add_subparsers(dest="autonomy_command", required=True)
+    autonomy_demo = autonomy_sub.add_parser("demo", help="Fake transport only; no activation")
+    autonomy_demo.add_argument("--out-dir", default=".data/autonomy")
+    autonomy_demo.set_defaults(func=_run_autonomy_demo)
+    autonomy_sub.add_parser("package", help="Print unsigned worksheet").set_defaults(
+        func=_run_autonomy_package
+    )
     supervised_parser = subparsers.add_parser(
         "supervised",
         help="M6 mock verification and unsigned package; never activates",
@@ -574,6 +584,20 @@ def build_parser() -> argparse.ArgumentParser:
     )
     serve_parser.set_defaults(func=_run_serve)
     return parser
+
+
+def _run_autonomy_demo(args: argparse.Namespace) -> int:
+    from ..autonomy.demo import run_demo
+
+    print(json.dumps(run_demo(Path(args.out_dir)), indent=2))
+    return 0
+
+
+def _run_autonomy_package(args: argparse.Namespace) -> int:
+    from ..autonomy.package import unsigned_package
+
+    print(json.dumps(unsigned_package(), indent=2))
+    return 0
 
 
 def _run_supervised_demo(args: argparse.Namespace) -> int:

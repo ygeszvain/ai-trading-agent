@@ -21,6 +21,20 @@ the server; the browser cannot create even a mock approval. See
 [supervised_readiness.md](supervised_readiness.md) for actual tests/screenshots.
 This addition does not repair normal migration startup or complete other M5 pages.
 
+## M7 read-only autonomy addition
+
+Prompt 12 adds authenticated `/autonomy` and `/api/v1/autonomy` projections for
+the exact fictional m7-fixture/simulation/run scope. They expose the frozen
+champion, envelope/expiry, health, denied changes, local incidents and promotion/
+rollback history, with exact financial strings and bounded collection coverage.
+Actual capital is USD 0, real authorization is absent, and automatic class is
+NONE. All control POSTs deny; reads cannot issue consent, renew or invoke models
+or broker transport. SQLite read transactions now explicitly BEGIN to pin the
+snapshot, alongside PostgreSQL's read-only REPEATABLE READ. Invalid synthetic
+evidence returns 503. [The M7 report](bounded_autonomy_readiness.md) records
+persisted-data tests and desktop/narrow Playwright checks. This addition does not
+repair normal startup, stream/reconnect contracts or earlier M5 gaps.
+
 ## 1. Delivery model (preserved)
 
 - FastAPI backend extended with server-rendered templates, minimal browser

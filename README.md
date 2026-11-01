@@ -24,6 +24,15 @@ a read-only approval/audit view and an [unsigned pilot worksheet](docs/supervise
 injected fake transport. `uv run trading-agent supervised package` prints the
 unresolved worksheet. Neither command can activate or access a financial account.
 
+Prompt 12 adds [bounded-autonomy control readiness](docs/bounded_autonomy_readiness.md)
+and an [unsigned owner review](docs/bounded_autonomy_owner_review.unsigned.json).
+`uv run trading-agent autonomy demo` runs three synthetic sessions under a frozen
+envelope with an independent monitor process and injected fake transport. There
+are zero per-intent application approvals in that fixture. The read-only
+`/autonomy` view exposes bindings, health and denied changes. Actual authority
+stays absent; the automatic change class is `NONE`, and promotion only prepares
+review evidence. No activation, renewal or real dispatch is implemented.
+
 **Financial authority: LIVE_NOT_AUTHORIZED. Approved live capital: USD 0.**
 Profitability is an unproven research hypothesis. Synthetic reports demonstrate
 software behavior and do not establish an investment edge. This is research

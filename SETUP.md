@@ -211,6 +211,27 @@ performs no financial-account authentication, account setup, orders, cancellatio
 transfers, or activation. Credentials belong in a separately controlled runtime
 only after the corresponding integration/security milestones and owner decisions.
 
+## 6a. Disabled bounded-autonomy review (Prompt 12)
+
+```sh
+uv run trading-agent autonomy package
+uv run trading-agent autonomy demo
+```
+
+These offline commands need no model, financial account, credential or existing
+database. A new private journal under `.data/autonomy/` records three fictional
+sessions, a frozen synthetic envelope, independent monitor process, six fake
+fills and denied changes. One initial fixture resume covers the sessions; this
+does not supply real authorization or waive broker-required approvals. The
+automatic change class stays NONE and no promotion/renewal/activation exists.
+
+Read [the M7 report and owner review](docs/bounded_autonomy_readiness.md) for
+commands, limits, persisted-data browser inspection and the unsigned worksheet.
+The `/autonomy` page is read-only. Normal website startup remains blocked by the
+known schema guard; the explicitly named fixture harness cannot trade. Owner-
+operated real integration checks, account/capital/limits/monitoring/recovery
+decisions and investment evidence remain pending. Setup never activates live mode.
+
 ## 7. Troubleshooting
 
 | Symptom | Action |
