@@ -121,6 +121,11 @@ remain unset. A separate private operations review records the implementation
 requirements and unresolved exit/escalation details. No test email, schedule,
 monitor deployment or financial action is authorized by recording a destination.
 
+The owner has confirmed personal responsibility for incident-email response;
+this is recorded in the private request and should not be requested again.
+It does not prove delivery, continuous availability, a tested response procedure
+or an independent monitor, and does not authorize a test email or activation.
+
 The added synthetic overnight regression verifies exposure detection at session
 close, persisted local escalation, no hidden next-session progression, unchanged
 holdings/loss history and zero automatic liquidation. The existing expiry,

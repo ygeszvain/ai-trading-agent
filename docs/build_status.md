@@ -1,9 +1,21 @@
 # Trading agent build status
 
-**Last updated:** 2026-11-01 (private operational choices and overnight regression; live disabled)
+**Last updated:** 2026-11-01 (owner incident responder confirmed privately; live disabled)
 **Current financial authority:** LIVE_NOT_AUTHORIZED
 **Approved live capital:** 0 USD. The original USD 500 owner request remains unsigned and inactive; current private native-read observations are excluded from public evidence. Earlier USD 1,000 worksheets remain historical.
 **Next dependency:** Local gateway/account-scoped normalization, reconciliation and external validation; the native Codex read-only check passed, with no next numbered prompt or live activation path.
+
+## Owner incident responder confirmed
+
+Recorded the owner's confirmation of responsibility for incident-email response
+in a new private unsigned draft, preserving its predecessor and protected pointer.
+The recipient and private settings remain excluded from public source. Confirmed
+the artifact digest/0600 permissions and unchanged null start/expiry/signature,
+zero approved live capital, and unverified/unconfigured email delivery. No email,
+broker call, runtime change or activation occurred. Responder identity is now
+resolved; sender/independent monitoring, delivery/response drills and escalation
+remain pending. This preference update required artifact validation and
+`git diff --check`; no software tests were rerun because runtime source is unchanged.
 
 ## Private operational choices and overnight control evidence
 
