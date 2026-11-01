@@ -67,7 +67,5 @@ def build_gateway(config: TradingConfig) -> MarketDataGateway:
         config.paper.synthetic_fixture_sessions,
         config.paper.synthetic_fixture_universe,
     )
-    provider = SyntheticMarketProvider(
-        market, exchange_timezone=config.paper.exchange_timezone
-    )
+    provider = SyntheticMarketProvider(market, exchange_timezone=config.paper.exchange_timezone)
     return SyntheticGateway(config, provider)

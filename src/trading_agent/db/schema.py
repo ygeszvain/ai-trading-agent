@@ -338,7 +338,6 @@ web_sessions = Table(
 )
 
 
-
 # ----------------------------------------------------------- research (M2)
 
 research_jobs = Table(
@@ -405,6 +404,43 @@ gateway_snapshots = Table(
     Index("ix_gateway_snapshots_run", "run_id", "kind", "session_date"),
 )
 
+# --------------------------------------------------------------------- M4
+# Broker gateway (plan section 14) — Robinhood official MCP, shadow mode.
+#
+# These tables hold sanitized, read-only views of the brokerage account and
+# the gateway's verification audit trail. The MCP token never appears here:
+# account identity is stored masked, and event payloads are structured.
+
+broker_snapshots = Table(
+    "broker_snapshots",
+    metadata,
+    Column("snapshot_id", String(64), primary_key=True),
+    Column("provider", String(32), nullable=False),
+    Column("account_alias", String(64), nullable=False),
+    Column("account_number_masked", String(32), nullable=True),
+    Column("session_date", Date, nullable=False),
+    Column("cash_usd", MONEY, nullable=True),
+    Column("positions_json", JSONB, nullable=True),
+    Column("open_orders_json", JSONB, nullable=True),
+    Column("capability_digest", String(64), nullable=True),
+    Column("status", String(32), nullable=False),
+    Column("detail", Text, nullable=True),
+    Column("fetched_at", TS, nullable=False),
+    Index("ix_broker_snapshots_provider", "provider", "session_date"),
+)
+
+broker_gateway_events = Table(
+    "broker_gateway_events",
+    metadata,
+    Column("event_id", String(64), primary_key=True),
+    Column("provider", String(32), nullable=False),
+    Column("ts", TS, nullable=False),
+    Column("event_type", String(64), nullable=False),
+    Column("detail", Text, nullable=True),
+    Column("payload_json", JSONB, nullable=True),
+    Index("ix_broker_gateway_events_ts", "provider", "ts"),
+)
+
 TABLES: list[Table] = [
     runs,
     instruments,
@@ -426,6 +462,8 @@ TABLES: list[Table] = [
     research_jobs,
     research_evaluations,
     gateway_snapshots,
+    broker_snapshots,
+    broker_gateway_events,
 ]
 
 # --------------------------------------------------------------------- M3

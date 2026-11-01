@@ -42,9 +42,11 @@ def _validate_structured(data: object) -> EvaluatedOutput:
     if not isinstance(view, str) or view not in VALID_VIEWS:
         return _invalid(f"view must be one of {sorted(VALID_VIEWS)}")
     confidence = data.get("confidence")
-    if isinstance(confidence, bool) or not isinstance(
-        confidence, (int, float)
-    ) or not 0 <= float(confidence) <= 1:
+    if (
+        isinstance(confidence, bool)
+        or not isinstance(confidence, (int, float))
+        or not 0 <= float(confidence) <= 1
+    ):
         return _invalid("confidence must be a number in [0, 1]")
 
     def _string_list(key: str) -> tuple[str, ...] | None:

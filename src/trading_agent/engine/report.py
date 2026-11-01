@@ -368,9 +368,8 @@ def render_text(report: ReportData) -> str:
             f" / {report.strategy_version}"
         ),
         f"data             {report.data_source} snapshot {report.data_snapshot_id}",
-        f"period           {report.first_bar_at} .. {report.last_bar_at} ({report.sessions} sessions)",
-        "",
-        "final equity (SIMULATED USD):",
+        f"period           {report.first_bar_at} .. {report.last_bar_at} "
+        f"({report.sessions} sessions) final equity (SIMULATED USD):",
     ]
     for book, value in report.equity.items():
         lines.append(f"  {book:<18} {value:>16}")

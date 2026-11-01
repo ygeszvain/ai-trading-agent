@@ -42,7 +42,10 @@ def run_to_dict(run: BacktestRun) -> dict:
         "settings": {
             "initial_cash_usd": _money(run.settings.initial_cash_usd),
             "cash_yield_annual": str(run.settings.cash_yield_annual),
-            "cost": {"fee_rate": str(run.settings.cost.fee_rate), "slippage_rate": str(run.settings.cost.slippage_rate)},
+            "cost": {
+                "fee_rate": str(run.settings.cost.fee_rate),
+                "slippage_rate": str(run.settings.cost.slippage_rate),
+            },
             "walk_forward": {
                 "fold_days": run.settings.walk_forward.fold_days,
                 "min_train_days": run.settings.walk_forward.min_train_days,
@@ -78,7 +81,9 @@ def run_to_dict(run: BacktestRun) -> dict:
                         "test": [fold.test_start.isoformat(), fold.test_end.isoformat()],
                         "chosen_rule": fold.chosen_rule.describe(),
                         "chosen_rule_digest": fold.chosen_rule.digest(),
-                        "train_score": _num(fold.train_score) if fold.train_score.is_finite() else None,
+                        "train_score": _num(fold.train_score)
+                        if fold.train_score.is_finite()
+                        else None,
                         "total_return": _num(fold.metrics.get("total_return")),
                         "sharpe": _num(fold.metrics.get("sharpe")),
                         "max_drawdown": _num(fold.metrics.get("max_drawdown")),
@@ -104,12 +109,17 @@ def run_to_dict(run: BacktestRun) -> dict:
         "provenance": dict(sorted(run.provenance.items())),
         "curve": {
             "momentum_composite": [
-                [session.isoformat(), _money(value)] for session, value in _composite_curve(run, "momentum-composite")
+                [session.isoformat(), _money(value)]
+                for session, value in _composite_curve(run, "momentum-composite")
             ],
             "passive_composite": [
-                [session.isoformat(), _money(value)] for session, value in _composite_curve(run, "passive-composite")
+                [session.isoformat(), _money(value)]
+                for session, value in _composite_curve(run, "passive-composite")
             ],
-            "cash": [[session.isoformat(), _money(value)] for session, value in _composite_curve(run, "cash")],
+            "cash": [
+                [session.isoformat(), _money(value)]
+                for session, value in _composite_curve(run, "cash")
+            ],
         },
     }
 
@@ -127,22 +137,37 @@ def write_report_package(run: BacktestRun, directory: Path) -> list[Path]:
     written: list[Path] = []
 
     results_path = directory / "results.json"
-    results_path.write_text(json.dumps(run_to_dict(run), indent=2, sort_keys=False) + "\n", encoding="utf-8")
+    results_path.write_text(
+        json.dumps(run_to_dict(run), indent=2, sort_keys=False) + "\n", encoding="utf-8"
+    )
     written.append(results_path)
 
     equity_path = directory / "equity.csv"
     with equity_path.open("w", newline="", encoding="utf-8") as handle:
         writer = csv.writer(handle)
         writer.writerow(
-            ["session", "momentum_composite", "passive_composite", "cash", *[f"book_{i.split(':')[-1]}" for i in run.instrument_ids]]
+            [
+                "session",
+                "momentum_composite",
+                "passive_composite",
+                "cash",
+                *[f"book_{i.split(':')[-1]}" for i in run.instrument_ids],
+            ]
         )
         momentum = {s: v for s, v in _composite_curve(run, "momentum-composite")}
         passive = {s: v for s, v in _composite_curve(run, "passive-composite")}
         cash = {s: v for s, v in _composite_curve(run, "cash")}
         books = {book.instrument_id: {s: v for s, v in book.curve} for book in run.books}
         for session in run.sessions:
-            row = [session.isoformat(), _money(momentum.get(session)), _money(passive.get(session)), _money(cash.get(session))]
-            row += [_money(books[instrument_id].get(session)) for instrument_id in run.instrument_ids]
+            row = [
+                session.isoformat(),
+                _money(momentum.get(session)),
+                _money(passive.get(session)),
+                _money(cash.get(session)),
+            ]
+            row += [
+                _money(books[instrument_id].get(session)) for instrument_id in run.instrument_ids
+            ]
             writer.writerow(row)
     written.append(equity_path)
 
@@ -153,7 +178,14 @@ def write_report_package(run: BacktestRun, directory: Path) -> list[Path]:
         for book in run.books:
             for fill_session, side, price, quantity, fee in sorted(book.fills):
                 writer.writerow(
-                    [fill_session.isoformat(), book.instrument_id, side, _money(price), f"{quantity}", _money(fee)]
+                    [
+                        fill_session.isoformat(),
+                        book.instrument_id,
+                        side,
+                        _money(price),
+                        f"{quantity}",
+                        _money(fee),
+                    ]
                 )
     written.append(fills_path)
 
@@ -175,9 +207,15 @@ def render_markdown(run: BacktestRun) -> str:
     add(f"- Data source: **{run.data_source}** (snapshots: `{run.data_snapshot_id}`)")
     add(f"- Range: {run.range_start} .. {run.range_end} ({len(run.sessions)} sessions)")
     add(f"- Instruments: {', '.join(run.instrument_ids)}")
-    add(f"- Capital: {run.settings.initial_cash_usd} per book; cash yield {run.settings.cash_yield_annual} annual (daily-compounded)")
-    add(f"- Costs: fee {run.settings.cost.fee_rate} + slippage {run.settings.cost.slippage_rate} per fill notional")
-    add(f"- Determinism: code `{run.code_version}` · spec `{run.spec_digest}` · config `{run.config_digest}`")
+    add(
+            f"- Capital: {run.settings.initial_cash_usd} per book; cash yield {run.settings.cash_yield_annual} annual (daily-compounded)"
+    )
+    add(
+            f"- Costs: fee {run.settings.cost.fee_rate} + slippage {run.settings.cost.slippage_rate} per fill notional"
+    )
+    add(
+            f"- Determinism: code `{run.code_version}` · spec `{run.spec_digest}` · config `{run.config_digest}`"
+    )
     add("")
     add("## Momentum composite vs benchmarks")
     add("")
@@ -189,7 +227,7 @@ def render_markdown(run: BacktestRun) -> str:
             continue
         m = benchmark.metrics
         add(
-            f"| {key} | {_pct(m.get('total_return'))} | {_pct(m.get('cagr'))} | {_num(m.get('sharpe'))} | {_pct(m.get('max_drawdown'))} | ${_money(m.get('final_equity'))} |"
+                f"| {key} | {_pct(m.get('total_return'))} | {_pct(m.get('cagr'))} | {_num(m.get('sharpe'))} | {_pct(m.get('max_drawdown'))} | ${_money(m.get('final_equity'))} |"
         )
     add("")
     add("## Per-instrument books (walk-forward pooled)")
@@ -199,7 +237,7 @@ def render_markdown(run: BacktestRun) -> str:
     for book in run.books:
         m = book.metrics
         add(
-            f"| {book.instrument_id} | {_pct(m.get('total_return'))} | {_pct(m.get('cagr'))} | {_num(m.get('sharpe'))} | {_pct(m.get('max_drawdown'))} | {book.data_gaps} | ${_money(book.cost_paid)} |"
+                f"| {book.instrument_id} | {_pct(m.get('total_return'))} | {_pct(m.get('cagr'))} | {_num(m.get('sharpe'))} | {_pct(m.get('max_drawdown'))} | {book.data_gaps} | ${_money(book.cost_paid)} |"
         )
     add("")
     add("## Walk-forward folds")
@@ -207,13 +245,19 @@ def render_markdown(run: BacktestRun) -> str:
     for book in run.books:
         add(f"### {book.instrument_id}")
         add("")
-        add("| Fold | Train window | Test window | Chosen rule | Train score | Test return | Test Sharpe |")
+        add(
+            "| Fold | Train window | Test window | Chosen rule | Train score | Test return | Test Sharpe |"
+        )
         add("|---|---|---|---|---|---|---|")
         for fold in book.folds:
-            train = f"{fold.train_start} .. {fold.train_end}" if fold.train_start < fold.train_end else "(none)"
+            train = (
+                f"{fold.train_start} .. {fold.train_end}"
+                if fold.train_start < fold.train_end
+                else "(none)"
+            )
             score = _num(fold.train_score) if fold.train_score.is_finite() else "n/a"
             add(
-                f"| {fold.fold_index} | {train} | {fold.test_start} .. {fold.test_end} | {fold.chosen_rule.describe()} | {score} "
+                    f"| {fold.fold_index} | {train} | {fold.test_start} .. {fold.test_end} | {fold.chosen_rule.describe()} | {score}"
                 f"| {_pct(fold.metrics.get('total_return'))} | {_num(fold.metrics.get('sharpe'))} |"
             )
         add("")
@@ -230,7 +274,9 @@ def render_markdown(run: BacktestRun) -> str:
     add("- `equity_curve.svg` — normalized equity comparison")
     add("")
     if run.data_source != "real":
-        add("> **Note**: this run used synthetic data and is a pipeline demonstration only; it must never be read as a performance forecast.")
+        add(
+            "> **Note**: this run used synthetic data and is a pipeline demonstration only; it must never be read as a performance forecast."
+        )
         add("")
     return "\n".join(lines) + "\n"
 
@@ -270,29 +316,47 @@ def render_svg(run: BacktestRun, width: int = 900, height: int = 420) -> str:
 
     colors = {"momentum-composite": "#1d4ed8", "passive-composite": "#b45309", "cash": "#6b7280"}
     parts = [
-        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>",
+            f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>"
         f"<rect width='{width}' height='{height}' fill='white'/>",
-        f"<text x='{left}' y='14' font-family='sans-serif' font-size='12' fill='#111'>{run.backtest_id} — normalized equity (log scale) · {run.data_source} data</text>",
+            f"<text x='{left}' y='14' font-family='sans-serif' font-size='12' fill='#111'>{run.backtest_id} — normalized equity (log scale) · {run.data_source} data</text>"
     ]
     # y-axis gridlines (2x, 1x, 0.5x)
     for label, factor in (("2.0x", 2.0), ("1.0x", 1.0), ("0.5x", 0.5)):
         log_v = _math.log(factor)
         if min_log <= log_v <= max_log:
             gy = y(Decimal(str(factor)))
-            parts.append(f"<line x1='{left}' y1='{gy:.1f}' x2='{width - right}' y2='{gy:.1f}' stroke='#e5e7eb'/>")
-            parts.append(f"<text x='{left - 8}' y='{gy + 4:.1f}' font-family='sans-serif' font-size='10' fill='#6b7280' text-anchor='end'>{label}</text>")
+            parts.append(
+                    f"<line x1='{left}' y1='{gy:.1f}' x2='{width - right}' y2='{gy:.1f}' stroke='#e5e7eb'/>"
+            )
+            parts.append(
+                    f"<text x='{left - 8}' y='{gy + 4:.1f}' font-family='sans-serif' font-size='10' fill='#6b7280' text-anchor='end'>{label}</text>"
+            )
     for key in sorted(series):
         points = " ".join(f"{x(s):.1f},{y(v):.1f}" for s, v in series[key])
-        parts.append(f"<polyline points='{points}' fill='none' stroke='{colors.get(key, '#111')}' stroke-width='1.6'/>")
+        parts.append(
+                f"<polyline points='{points}' fill='none' stroke='{colors.get(key, '#111')}' stroke-width='1.6'/>"
+        )
     x0, x1 = x(s0), x(s1)
-    parts.append(f"<line x1='{x0:.1f}' y1='{bottom}' x2='{x1:.1f}' y2='{bottom}' stroke='#9ca3af'/>")
-    parts.append(f"<text x='{x0:.1f}' y='{height - 8}' font-family='sans-serif' font-size='10' fill='#6b7280'>{s0}</text>")
-    parts.append(f"<text x='{x1:.1f}' y='{height - 8}' font-family='sans-serif' font-size='10' fill='#6b7280' text-anchor='end'>{s1}</text>")
+    parts.append(
+        f"<line x1='{x0:.1f}' y1='{bottom}' x2='{x1:.1f}' y2='{bottom}' stroke='#9ca3af'/>"
+    )
+    parts.append(
+            f"<text x='{x0:.1f}' y='{height - 8}' font-family='sans-serif' font-size='10' fill='#6b7280'>{s0}</text>"
+    )
+    parts.append(
+            f"<text x='{x1:.1f}' y='{height - 8}' font-family='sans-serif' font-size='10' fill='#6b7280' text-anchor='end'>{s1}</text>"
+    )
     legend_x = left
     for key in sorted(series):
-        parts.append(f"<rect x='{legend_x}' y='{height - 24}' width='10' height='3' fill='{colors.get(key, '#111')}'/>")
-        label = key.replace("momentum-composite", "momentum").replace("passive-composite", "passive")
-        parts.append(f"<text x='{legend_x + 13}' y='{height - 20}' font-family='sans-serif' font-size='10' fill='#374151'>{label}</text>")
+        parts.append(
+                f"<rect x='{legend_x}' y='{height - 24}' width='10' height='3' fill='{colors.get(key, '#111')}'/>"
+        )
+        label = key.replace("momentum-composite", "momentum").replace(
+            "passive-composite", "passive"
+        )
+        parts.append(
+                f"<text x='{legend_x + 13}' y='{height - 20}' font-family='sans-serif' font-size='10' fill='#374151'>{label}</text>"
+        )
         legend_x += 13 + len(label) * 6 + 18
     parts.append("</svg>")
     return "\n".join(parts)

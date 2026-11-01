@@ -35,6 +35,13 @@ class BrokerExecutionDenied(BrokerError):
     """Execution was explicitly denied by policy or the activation gate."""
 
 
+class CapabilityMismatch(BrokerError):
+    """The broker's verified capability digest differs from the allowlisted
+    digest. Fail-closed: no reads and no execution until the owner re-verifies
+    and updates the configuration.
+    """
+
+
 class NormalizedOrderStatus(StrEnum):
     """Application-normalized lifecycle states (plan section 14 diagram)."""
 
@@ -80,12 +87,42 @@ class OrderRequest:
 
 
 @dataclass(frozen=True)
+class PositionView:
+    """One sanitized position (M4 shadow reads; plan section 14)."""
+
+    instrument_id: str
+    quantity: Decimal
+    avg_price: Decimal | None = None
+    market_value: Decimal | None = None
+
+
+@dataclass(frozen=True)
+class OpenOrderView:
+    """One sanitized open order from the broker's own book."""
+
+    broker_order_id: str
+    instrument_id: str
+    side: str
+    quantity: Decimal
+    limit_price: Decimal | None = None
+    status: str = "open"
+
+
+@dataclass(frozen=True)
 class AccountSnapshot:
-    """Timestamped account view. M0 adapters never report available=True."""
+    """Timestamped account view.
+
+    M0-style adapters (simulator) report only ``available``/``reason``. The
+    Robinhood MCP adapter (M4) additionally fills the sanitized data fields
+    during shadow-mode reads. ``available=False`` rows must never carry data.
+    """
 
     available: bool
     reason: str
     as_of: datetime | None = None
+    cash: Decimal | None = None
+    positions: tuple[PositionView, ...] = ()
+    open_orders: tuple[OpenOrderView, ...] = ()
 
 
 @dataclass(frozen=True)

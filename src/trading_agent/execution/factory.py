@@ -35,11 +35,9 @@ def build_broker_adapter(
             ]
         )
     if provider == "robinhood":
-        return RobinhoodMcpBrokerAdapter(
-            mcp_url=config.broker.robinhood_mcp_url,
-            approved_account_id=config.broker.approved_account_id,
-            allowlisted_tool_schema_digest=config.broker.allowlisted_tool_schema_digest,
-        )
+        # M4: real shadow-mode gateway. Construction never opens a network
+        # session; the first shadow cycle does that and fails closed.
+        return RobinhoodMcpBrokerAdapter(config, session=session)
     return SimulatorBrokerAdapter(
         config,
         run_id=run_id,
@@ -47,3 +45,26 @@ def build_broker_adapter(
         account_alias=account_alias,
         initial_cash=initial_cash,
     )
+
+
+def build_shadow_adapter(
+    config: TradingConfig, *, session: Session | None = None, phrase: str | None = None
+) -> BrokerAdapter:
+    """Adapter for the persistent shadow gateway (plan section 17).
+
+    Honors ``broker.shadow_provider``; when unset it falls back to the
+    engine's provider. Execution is disabled in every returned adapter:
+    the simulator adapter rejects orders in live mode, and the Robinhood
+    adapter refuses them in every mode.
+    """
+    provider = config.broker.shadow_provider or config.broker.provider
+    if provider == "robinhood":
+        if phrase is None:
+            raise ConfigError(
+                [
+                    "broker: robinhood shadow gateway requires the credential vault phrase "
+                    "(set TRADING_AGENT_CREDENTIAL_PHRASE or pass phrase=)"
+                ]
+            )
+        return RobinhoodMcpBrokerAdapter(config, session=session, phrase=phrase)
+    return SimulatorBrokerAdapter(config, session=session)

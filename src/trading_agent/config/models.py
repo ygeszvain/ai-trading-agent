@@ -12,10 +12,11 @@ Design rules:
 
 from __future__ import annotations
 
-from datetime import UTC, date, datetime
 import os
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
+from pathlib import Path
 from typing import Any, Literal
 from urllib.parse import urlparse
 
@@ -60,8 +61,6 @@ class SourceId(StrEnum):
     COINDESK = "coindesk"
     YAHOO = "yahoo"
     COINBASE = "coinbase"
-
-
 
 
 def _decimal(value: Any, *, field: str, allow_negative: bool = False) -> Decimal:
@@ -170,8 +169,6 @@ class LLMSettings(BaseModel):
         }
 
 
-
-
 class ResearchSettings(BaseModel):
     """M2 research overlay: local LLM evaluations, sanitized and persisted.
 
@@ -198,6 +195,18 @@ class BrokerSettings(BaseModel):
     robinhood_mcp_url: str = "https://agent.robinhood.com/mcp/trading"
     approved_account_id: str | None = None
     allowlisted_tool_schema_digest: str | None = None
+    # M4 shadow mode (plan section 14): read-only observation of the owner's
+    # own Robinhood account via the official MCP. Execution stays disabled.
+    shadow_enabled: bool = True
+    # Which provider the persistent shadow gateway observes. Defaults to the
+    # engine's ``provider`` when null. Lets paper runs keep the simulator
+    # while the gateway watches the real account (plan section 14/17).
+    shadow_provider: Literal["simulator", "robinhood"] | None = None
+    shadow_poll_seconds: float = Field(default=30.0, ge=5.0, le=3600.0)
+    account_number: str | None = None
+    token_store_path: str = ".data/robinhood_mcp_token.json"
+    capability_allowlist_path: str = ".data/robinhood_tool_allowlist.json"
+    request_timeout_seconds: float = Field(default=20.0, ge=1.0, le=120.0)
 
 
 class LiveSettings(BaseModel):
@@ -465,8 +474,15 @@ class SourceSpec(BaseModel):
     @classmethod
     def _validate_asset_classes(cls, value: list[str]) -> list[str]:
         allowed = {
-            "us_equity", "global_equity", "us_bond", "global_bond",
-            "us_fx", "global_fx", "us_commodity", "crypto", "synthetic-equity",
+            "us_equity",
+            "global_equity",
+            "us_bond",
+            "global_bond",
+            "us_fx",
+            "global_fx",
+            "us_commodity",
+            "crypto",
+            "synthetic-equity",
         }
         cleaned = [item.strip() for item in value if item.strip()]
         for asset_class in cleaned:
@@ -493,6 +509,8 @@ class DataSettings(BaseModel):
     registry: list[SourceSpec] = Field(
         default_factory=lambda: [SourceSpec(id=SourceId.SYNTHETIC, enabled=True)]
     )
+    # On-disk cache for registry sources (data sync/status commands).
+    registry_root: Path = Path("data/registry")
 
     @model_validator(mode="after")
     def _validate_registry(self) -> DataSettings:
@@ -591,7 +609,9 @@ class WalkForwardSettings(BaseModel):
     @classmethod
     def _validate_candidates(cls, value: Any, info: ValidationInfo) -> list[Decimal]:
         if isinstance(value, (list, tuple)) and value:
-            return [_fraction(item, field=f"backtest.walk_forward.{info.field_name}") for item in value]
+            return [
+                _fraction(item, field=f"backtest.walk_forward.{info.field_name}") for item in value
+            ]
         raise ValueError(f"backtest.walk_forward.{info.field_name} must be a non-empty list")
 
     @model_validator(mode="after")
@@ -802,7 +822,9 @@ class TradingConfig(BaseModel):
                         "symbols": entry.symbols,
                         "asset_classes": entry.asset_classes,
                         "api_base_url": entry.api_base_url,
-                        "api_key_configured": bool(entry.api_key_env and os.environ.get(entry.api_key_env)),
+                        "api_key_configured": bool(
+                            entry.api_key_env and os.environ.get(entry.api_key_env)
+                        ),
                         "refresh": entry.refresh.model_dump(mode="json"),
                     }
                     for entry in self.data.registry

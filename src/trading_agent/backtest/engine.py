@@ -32,11 +32,16 @@ import hashlib
 import math
 from dataclasses import dataclass, field
 from datetime import date
-from decimal import Decimal, ROUND_DOWN
+from decimal import ROUND_DOWN, Decimal
 
 from .. import __version__
-from ..config.models import BacktestCostSettings, BacktestSettings, TradingConfig, WalkForwardSettings
-from ..data.provider import MarketDataProvider, SessionClose
+from ..config.models import (
+    BacktestCostSettings,
+    BacktestSettings,
+    TradingConfig,
+    WalkForwardSettings,
+)
+from ..data.provider import MarketDataProvider
 from ..money import round_money
 from ..strategies.baselines import daily_yield_factor
 
@@ -97,7 +102,7 @@ class CloseSeries:
         """Observations dated at or before ``as_of`` (point-in-time slice)."""
         index = bisect.bisect_right(self._dates, as_of)
         low = max(0, index - count) if count is not None else 0
-        return list(zip(self._dates[low:index], self._closes[low:index]))
+        return list(zip(self._dates[low:index], self._closes[low:index], strict=False))
 
     def value_on(self, session: date) -> Decimal | None:
         return self._by_date.get(session)
@@ -125,15 +130,17 @@ def compute_metrics(curve: list[tuple[date, Decimal]]) -> dict[str, Decimal | fl
     years = max(len(curve) / 365.25, 1e-9)
     cagr = Decimal(str(round(math.exp(math.log(float(last / first)) / years) - 1.0, 12)))
     returns = [
-        curve[i][1] / curve[i - 1][1] - 1
-        for i in range(1, len(curve))
-        if curve[i - 1][1] > 0
+        curve[i][1] / curve[i - 1][1] - 1 for i in range(1, len(curve)) if curve[i - 1][1] > 0
     ]
     if len(returns) >= 2:
         mean = sum(returns, Decimal("0")) / len(returns)
         variance = sum((r - mean) ** 2 for r in returns) / (len(returns) - 1)
         std = math.sqrt(float(variance))
-        sharpe = Decimal(str(round(float(mean) / std * math.sqrt(252.0), 8))) if std > 0 else Decimal("0")
+        sharpe = (
+            Decimal(str(round(float(mean) / std * math.sqrt(252.0), 8)))
+            if std > 0
+            else Decimal("0")
+        )
     else:
         sharpe = Decimal("0")
     running_max = Decimal("0")
@@ -188,7 +195,7 @@ def run_single_book(
             mark = series.value_through(session)  # stale mark; gap counted, never filled
             if mark is None:
                 continue  # warm-up before the first observation
-        equity = cash + quantity * mark
+        cash + quantity * mark
         momentum = momentum_over_window(series.up_to(session, rule.lookback + 1), rule.lookback)
         if quantity > 0 and momentum is not None and momentum <= rule.exit_momentum:
             gross = quantity * mark
@@ -216,7 +223,9 @@ def run_single_book(
     return result
 
 
-def run_cash_benchmark(sessions: list[date], initial_cash: Decimal, cash_yield_annual: Decimal) -> list[tuple[date, Decimal]]:
+def run_cash_benchmark(
+    sessions: list[date], initial_cash: Decimal, cash_yield_annual: Decimal
+) -> list[tuple[date, Decimal]]:
     factor = Decimal(1) + daily_yield_factor(cash_yield_annual)
     cash = initial_cash
     curve: list[tuple[date, Decimal]] = []
@@ -329,9 +338,12 @@ class WalkForwardResult:
     metrics: dict[str, Decimal | float]
     data_gaps: int
     cost_paid: Decimal
+    fills: list[tuple[date, str, Decimal, Decimal, Decimal]] = field(default_factory=list)
 
 
-def _close_pairs(provider: MarketDataProvider, instrument_id: str, range_start: date, range_end: date) -> list[tuple[date, Decimal]]:
+def _close_pairs(
+    provider: MarketDataProvider, instrument_id: str, range_start: date, range_end: date
+) -> list[tuple[date, Decimal]]:
     pairs = [
         (close.session, close.close)
         for close in provider.recent_session_closes(instrument_id, range_end, 10**9)
@@ -362,6 +374,7 @@ def walk_forward_instrument(
     folds = _fold_sessions(sessions, wf.fold_days)
     fold_results: list[WalkForwardFold] = []
     curve: list[tuple[date, Decimal]] = []
+    all_fills: list[tuple[date, str, Decimal, Decimal, Decimal]] = []
     total_gaps = 0
     total_cost = Decimal("0")
     for index, fold_sessions in enumerate(folds):
@@ -385,6 +398,7 @@ def walk_forward_instrument(
             )
         )
         curve.extend(run.curve)
+        all_fills.extend(run.fills)
         total_gaps += run.data_gaps
         total_cost += run.cost_paid
     return WalkForwardResult(
@@ -395,6 +409,7 @@ def walk_forward_instrument(
         metrics=compute_metrics(curve),
         data_gaps=total_gaps,
         cost_paid=total_cost,
+        fills=all_fills,
     )
 
 
@@ -405,7 +420,9 @@ class BenchmarkResult:
     metrics: dict[str, Decimal | float]
 
 
-def _aggregate_equal_weight(curves: list[list[tuple[date, Decimal]]], sessions: list[date]) -> list[tuple[date, Decimal]]:
+def _aggregate_equal_weight(
+    curves: list[list[tuple[date, Decimal]]], sessions: list[date]
+) -> list[tuple[date, Decimal]]:
     """Equal-weight composite of independent books (same total capital)."""
     if not curves:
         return []
@@ -459,11 +476,13 @@ def run_backtest(
     sessions = [s for s in all_sessions if bt.range_start <= s <= bt.range_end]
     if not sessions:
         raise ValueError(
-            f"no data sessions inside {bt.range_start}..{bt.range_end}; widen the config backtest range or fetch deeper history"
+                f"no data sessions inside {bt.range_start}..{bt.range_end}; widen the config backtest range or fetch deeper history"
         )
     providers_sorted = sorted(providers.values(), key=lambda p: (p.data_snapshot_id(), p.source_id))
     instrument_ids = [
-        instrument.instrument_id for provider in providers_sorted for instrument in provider.instruments()
+        instrument.instrument_id
+        for provider in providers_sorted
+        for instrument in provider.instruments()
     ]
     if not instrument_ids:
         raise ValueError("no instruments to backtest")
@@ -474,7 +493,9 @@ def run_backtest(
         target_weight=Decimal(config.strategy.target_weight),
     )
     books = [
-        walk_forward_instrument(provider, instrument.instrument_id, bt.range_start, bt.range_end, book, bt.walk_forward)
+        walk_forward_instrument(
+            provider, instrument.instrument_id, bt.range_start, bt.range_end, book, bt.walk_forward
+        )
         for provider in providers_sorted
         for instrument in provider.instruments()
     ]
@@ -482,9 +503,17 @@ def run_backtest(
     benchmarks: list[BenchmarkResult] = []
     for provider in providers_sorted:
         for instrument in provider.instruments():
-            series = CloseSeries(_close_pairs(provider, instrument.instrument_id, bt.range_start, bt.range_end))
-            curve = run_passive_benchmark(series, sessions, per_book_cash, bt.cash_yield_annual, bt.cost)
-            benchmarks.append(BenchmarkResult(f"passive:{instrument.instrument_id}", curve, compute_metrics(curve)))
+            series = CloseSeries(
+                _close_pairs(provider, instrument.instrument_id, bt.range_start, bt.range_end)
+            )
+            curve = run_passive_benchmark(
+                series, sessions, per_book_cash, bt.cash_yield_annual, bt.cost
+            )
+            benchmarks.append(
+                BenchmarkResult(
+                    f"passive:{instrument.instrument_id}", curve, compute_metrics(curve)
+                )
+            )
     cash_curve = run_cash_benchmark(sessions, bt.initial_cash_usd, bt.cash_yield_annual)
     momentum_composite = _aggregate_equal_weight([b.curve for b in books], sessions)
     passive_composite = _aggregate_equal_weight(
@@ -492,7 +521,9 @@ def run_backtest(
     )
     benchmarks += [
         BenchmarkResult("cash", cash_curve, compute_metrics(cash_curve)),
-        BenchmarkResult("momentum-composite", momentum_composite, compute_metrics(momentum_composite)),
+        BenchmarkResult(
+            "momentum-composite", momentum_composite, compute_metrics(momentum_composite)
+        ),
         BenchmarkResult("passive-composite", passive_composite, compute_metrics(passive_composite)),
     ]
     has_real = any("realdata" in p.data_snapshot_id() for p in providers_sorted)
@@ -529,11 +560,21 @@ def run_backtest(
         provenance={
             "decision_timing": "one decision per session, at the session close",
             "execution": "decision-session close, long-only, one position per instrument",
-            "cost_model": f"fee {bt.cost.fee_rate} + slippage {bt.cost.slippage_rate} per fill notional",
-            "cash_yield": f"annual {bt.cash_yield_annual}, daily-compounded (paper-ledger convention)",
-            "walk_forward": f"fold_days={bt.walk_forward.fold_days} min_train_days={bt.walk_forward.min_train_days} score={bt.walk_forward.score}",
+            "costs": (
+                f"fee {bt.cost.fee_rate} + slippage {bt.cost.slippage_rate} per fill notional"
+            ),
+            "cash_yield": (
+                f"annual {bt.cash_yield_annual}, daily-compounded (paper-ledger convention)"
+            ),
+            "walk_forward": (
+                f"fold_days={bt.walk_forward.fold_days} min_train_days={bt.walk_forward.min_train_days} score={bt.walk_forward.score}"
+            ),
             "leakage": "point-in-time slicing; unsorted/duplicate series raise LeakageError; folds fit on strictly earlier sessions",
-            "determinism": f"code {__version__}, spec {spec_digest}, config {config_digest}; Decimal arithmetic with fixed factors",
-            "data": f"snapshots: {','.join(sorted({p.data_snapshot_id() for p in providers_sorted}))}",
+            "determinism": (
+                f"code {__version__}, spec {spec_digest}, config {config_digest}; Decimal arithmetic with fixed factors"
+            ),
+            "data": (
+                f"snapshots: {','.join(sorted({p.data_snapshot_id() for p in providers_sorted}))}"
+            ),
         },
     )

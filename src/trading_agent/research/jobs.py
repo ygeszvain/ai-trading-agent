@@ -79,6 +79,8 @@ def run_job(
     """
     if prompt_version not in PROMPT_VERSIONS:
         raise ValueError(f"unknown research prompt version: {prompt_version!r}")
+    canonical_config = config.model_dump_json(indent=None)
+    config_digest = hashlib.sha256(canonical_config.encode("utf-8")).hexdigest()[:32]
     source_id = "local_model"
     job_id = job_id_for(run_id, session_date, source_id, prompt_version)
 
@@ -100,7 +102,11 @@ def run_job(
     }
 
     selected = _select_instruments(
-        session, run_id, session_start, decision_ts, instruments,
+        session,
+        run_id,
+        session_start,
+        decision_ts,
+        instruments,
         limit=config.research.evaluations_per_job,
     )
     if existing is not None:
@@ -125,9 +131,7 @@ def run_job(
         )
         session.commit()
 
-    summary = JobSummary(
-        job_id=job_id, run_id=run_id, session_date=session_date, status="running"
-    )
+    summary = JobSummary(job_id=job_id, run_id=run_id, session_date=session_date, status="running")
     if not selected:
         summary.status = "ok"
         _finish_job(session, job_id, summary, ended_at=now)
@@ -135,13 +139,18 @@ def run_job(
 
     for instrument_id in selected:
         brief = _build_brief(
-            config, provider, session, run_id, session_date, instrument_id,
-            session_start=session_start, decision_ts=decision_ts,
+            config,
+            provider,
+            session,
+            run_id,
+            session_date,
+            instrument_id,
+            session_start=session_start,
+            decision_ts=decision_ts,
         )
         if brief is None:
             summary.status = "degraded"
             continue
-        prompt_digest = _digest(prompt_version, brief.prompt_seed())
         system, user = build_prompt(brief, prompt_version)
         eval_id = "re-" + _digest(job_id, instrument_id, brief.data_snapshot_id)[:20]
         response: ModelResponse | None = None

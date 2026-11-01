@@ -26,10 +26,20 @@ llm:
   job_timeout_seconds: 120
 
 broker:
-  provider: simulator             # simulator | robinhood
+  provider: simulator             # paper research engine broker (stays simulator)
   robinhood_mcp_url: https://agent.robinhood.com/mcp/trading
   approved_account_id: null       # owner-controlled alias only; never a raw account number
   allowlisted_tool_schema_digest: null
+  # M4 shadow gateway (plan section 14/17): the persistent, read-only observer
+  # on the owner's own Robinhood account via the official MCP. Execution is
+  # disabled in every code path; this build never sends a trade instruction.
+  shadow_enabled: true
+  shadow_provider: robinhood      # gateway observes Robinhood; paper keeps simulator
+  shadow_poll_seconds: 30
+  account_number: null            # owner's account, entered via `trading-agent broker setup`
+  token_store_path: .data/robinhood_mcp_token.json
+  capability_allowlist_path: .data/robinhood_tool_allowlist.json
+  request_timeout_seconds: 20
 
 live:
   enabled: false
@@ -112,6 +122,20 @@ data:
   #     stays UNKNOWN until end-of-session reconciliation resolves it.
   scenarios:
     - lost_ack
+  # M3 source registry (plan section 8): synthetic stays default; real sources are
+  # registry-gated and OFF by default. Enable FRED with: export FRED_API_KEY=...
+  # then `trading-agent data sync` (cached data then feeds `backtest run`).
+  registry:
+    - id: synthetic
+      enabled: true
+    - id: fred
+      enabled: false
+      symbols: [SP500, IEX, IEI, IEF, IEG, IEH]
+      asset_classes: [global_equity, us_bond]
+      api_key_env: FRED_API_KEY
+      refresh:
+        max_age_minutes: 1440
+        backfill_sessions: 5
 
 strategy:
   name: trend-momentum
@@ -138,3 +162,12 @@ engine:
     - TEST_A
     - TEST_B
     - TEST_C
+
+# M3 deterministic walk-forward backtest (plan section 8). The engine refits rules
+# on a rolling training window, evaluates on unseen test folds, and aggregates
+# point-in-time per-instrument results into one equal-weight portfolio curve.
+# Defaults: 90-session train / 45-session test / 5-session refit gap, 10 steps.
+backtest:
+  range_start: "2026-05-04"      # matches data.start_session (synthetic fixture window)
+  range_end: "2026-11-30"        # covers the full 128-session fixture run
+  include_synthetic: true        # fixture source runs through the same engine as real data

@@ -172,9 +172,7 @@ class LocalModelClient:
     def complete(self, system: str, user: str, *, max_tokens: int = 512) -> ModelResponse:
         """One bounded chat completion. Increments the per-job call budget."""
         if self.calls_made >= self._budget:
-            raise ModelBudgetError(
-                f"per-job model call budget exhausted ({self._budget} calls)"
-            )
+            raise ModelBudgetError(f"per-job model call budget exhausted ({self._budget} calls)")
         self.calls_made += 1
         payload: dict[str, Any] = {
             "messages": [

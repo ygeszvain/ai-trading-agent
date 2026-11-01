@@ -8,7 +8,6 @@ validation, at request time (defense in depth).
 from __future__ import annotations
 
 import ipaddress
-import socket
 from urllib.parse import urlparse
 
 _LOOPBACK_HOSTS = frozenset({"localhost", "127.0.0.1", "::1", "0.0.0.0"})

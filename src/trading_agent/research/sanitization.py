@@ -16,7 +16,9 @@ MAX_REASONABLE_TEXT_CHARS = 32_000
 # Patterns that indicate secret-like material; any hit triggers redaction.
 _SECRET_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?i)\b(bearer)\s+[A-Za-z0-9._\-]{16,}"),
-    re.compile(r"(?i)\b(api[_-]?key|apikey|token|secret|password|passphrase)\b[:\s=]+['\"]?[A-Za-z0-9._\-]{12,}"),
+    re.compile(
+        r"(?i)\b(api[_-]?key|apikey|token|secret|password|passphrase)\b[:\s=]+['\"]?[A-Za-z0-9._\-]{12,}"
+    ),
     re.compile(r"\b[A-Za-z0-9+/]{48,}={0,2}\b"),  # long base64/hex blobs
     re.compile(r"\b(?:\d[ -]*){13,19}\b"),  # card-like digit runs
     re.compile(r"(?i)\b(pk_[A-Za-z0-9]{16,}|sk-[A-Za-z0-9]{16,}|xox[baprs]-[A-Za-z0-9-]{8,})\b"),

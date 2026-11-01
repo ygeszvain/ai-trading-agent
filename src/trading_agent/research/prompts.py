@@ -94,18 +94,14 @@ def build_prompt(brief: ResearchBrief, version: str) -> tuple[str, str]:
         f"Instrument: {brief.symbol} ({brief.asset_class}; synthetic fixture: {brief.is_synthetic})"
     )
     lines.append(f"Session date: {brief.session_date.isoformat()}")
-    lines.append(
-        f"Data snapshot: {brief.data_snapshot_id} (generator {brief.generator_version})"
-    )
+    lines.append(f"Data snapshot: {brief.data_snapshot_id} (generator {brief.generator_version})")
     lines.append("")
     lines.append("Recent session closes (oldest first):")
     for session_date, close in brief.session_closes:
         lines.append(f"  {session_date.isoformat()}: {close}")
     lines.append("")
     if brief.last_quote_price is not None:
-        lines.append(
-            f"Latest quote: {brief.last_quote_price} ({brief.age_label()}, point-in-time)"
-        )
+        lines.append(f"Latest quote: {brief.last_quote_price} ({brief.age_label()}, point-in-time)")
     else:
         lines.append("Latest quote: none (stale/missing)")
     if brief.session_volume is not None:
