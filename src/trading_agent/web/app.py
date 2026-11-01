@@ -272,6 +272,45 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
             },
         )
 
+    def readiness_view(
+        session: Session, run_id: str | None, intent_id: str | None
+    ) -> dict[str, Any]:
+        from ..supervised.view import project
+
+        return project(
+            session.connection(), config, now=datetime.now(UTC), run_id=run_id, intent_id=intent_id
+        )
+
+    @app.get("/readiness", response_class=HTMLResponse)
+    async def page_readiness(
+        request: Request,
+        session: Session = SessionDep,
+        run_id: str | None = None,
+        intent_id: str | None = None,
+    ) -> Response:
+        require_auth(request)
+        view = readiness_view(session, run_id, intent_id)
+        return templates.TemplateResponse(
+            request=request, name="readiness.html", context={**base_ctx, "view": view}
+        )
+
+    @app.get("/api/v1/readiness")
+    async def api_readiness(
+        request: Request,
+        session: Session = SessionDep,
+        run_id: str | None = None,
+        intent_id: str | None = None,
+    ) -> dict[str, Any]:
+        require_auth(request)
+        return readiness_view(session, run_id, intent_id)
+
+    @app.post("/api/v1/readiness/{action}")
+    async def denied_live_control(request: Request, action: str) -> Response:
+        require_auth(request)
+        raise HTTPException(
+            status_code=403, detail="LIVE_NOT_AUTHORIZED: actual live controls unavailable"
+        )
+
     # --------------------------------------------------------------- api
 
     @app.get("/api/v1/health")

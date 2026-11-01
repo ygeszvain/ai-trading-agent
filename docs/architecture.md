@@ -29,6 +29,18 @@ application cannot guarantee cancellation or liquidation at a broker. Runtime
 and account monitoring/secret separation require independent owner validation.
 Overall readiness is FAIL; do not infer a safe deployed system from module names.
 
+## M6 mock control boundary — November 1
+
+The [M6 report](supervised_readiness.md) documents immutable scope/consent,
+transactional reservations, durable attempts, final executor revalidation and
+monotonic generation fencing. A child-process demonstration accepts only a
+bounded typed MOCK script and the exact offline FakeTransport. The website reads
+persisted mock scope and cannot issue approvals/activation; its command routes
+always deny. The fixture signer is public test material, not an owner identity
+service. Real dispatch, credential injection, separate deployed OS privileges,
+monitoring and broker authorization remain unavailable. An unsigned owner
+worksheet cannot activate anything. The prior schema/readiness failures remain.
+
 ## 1. Product shape and trust planes
 
 One owner, one local installation, one dedicated trading account. The system

@@ -20,6 +20,7 @@ from sqlalchemy import (
     Column,
     Date,
     DateTime,
+    ForeignKey,
     Index,
     Integer,
     MetaData,
@@ -529,3 +530,55 @@ data_quality_session_idx = Index(
     data_quality.c.session_id,
 )
 data_snapshots_idx = Index("ix_data_snapshots_source", data_snapshots.c.source_id)
+
+
+# M6 mock-only control journal; production dispatch remains unavailable.
+m6_accounts = Table(
+    "m6_accounts",
+    metadata,
+    Column("account_key", String(64), primary_key=True),
+    Column("document", Text, nullable=False),
+)
+m6_approvals = Table(
+    "m6_approvals",
+    metadata,
+    Column("approval_id", String(96), primary_key=True),
+    Column("account_key", String(64), ForeignKey("m6_accounts.account_key"), nullable=False),
+    Column("intent_hash", String(64), nullable=False, unique=True),
+    Column("document", Text, nullable=False),
+    Column("consumed", Boolean, nullable=False),
+    Column("revoked", Boolean, nullable=False),
+)
+m6_orders = Table(
+    "m6_orders",
+    metadata,
+    Column("intent_id", String(96), primary_key=True),
+    Column("account_key", String(64), ForeignKey("m6_accounts.account_key"), nullable=False),
+    Column(
+        "approval_id",
+        String(96),
+        ForeignKey("m6_approvals.approval_id"),
+        nullable=False,
+        unique=True,
+    ),
+    Column("document", Text, nullable=False),
+)
+m6_fills = Table(
+    "m6_fills",
+    metadata,
+    Column("fill_id", String(96), primary_key=True),
+    Column("account_key", String(64), ForeignKey("m6_accounts.account_key"), nullable=False),
+    Column("order_id", String(96), ForeignKey("m6_orders.intent_id"), nullable=False),
+    Column("document", Text, nullable=False),
+)
+m6_audit = Table(
+    "m6_audit",
+    metadata,
+    Column("sequence", Integer, primary_key=True, autoincrement=True),
+    Column("account_key", String(64), ForeignKey("m6_accounts.account_key"), nullable=False),
+    Column("run_id", String(96), nullable=False),
+    Column("at", String(40), nullable=False),
+    Column("event_type", String(64), nullable=False),
+    Column("payload", Text, nullable=False),
+)
+M6_TABLES = (m6_accounts, m6_approvals, m6_orders, m6_fills, m6_audit)

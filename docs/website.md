@@ -11,6 +11,16 @@ acceptance certificate. Browser reads do not authorize broker or model work.
 **Governing specs:** [Local Trading Website Spec](Local_Trading_Website_Spec.md)
 and build plan section 18.
 
+## M6 read-only readiness addition
+
+Prompt 11 adds authenticated `/readiness` and `/api/v1/readiness` for the unsigned
+pilot worksheet and persisted m6-fixture/simulation approvals, intent/risk/evidence
+hashes, expiry, outcomes and bounded audit coverage. Actual authority remains
+LIVE_NOT_AUTHORIZED with zero approved capital. Every control POST is denied by
+the server; the browser cannot create even a mock approval. See
+[supervised_readiness.md](supervised_readiness.md) for actual tests/screenshots.
+This addition does not repair normal migration startup or complete other M5 pages.
+
 ## 1. Delivery model (preserved)
 
 - FastAPI backend extended with server-rendered templates, minimal browser

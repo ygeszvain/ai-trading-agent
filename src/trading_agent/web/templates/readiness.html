@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% set page = "readiness" %}
+{% block content %}
+<h1>Supervised pilot readiness — LIVE_NOT_AUTHORIZED</h1>
+<p>Read-only review. Actual live controls are unavailable. Software tests do not pass integration or investment evidence.</p>
+<div class="cards">
+  <div class="card"><div class="k">Requested ceiling (inactive draft)</div><div class="v">USD {{ view.package.requested_capital_ceiling_usd }}</div></div>
+  <div class="card"><div class="k">Runtime-approved capital</div><div class="v">USD {{ view.runtime.approved_capital_usd }}</div></div>
+  <div class="card"><div class="k">Actual runtime mode</div><div class="v">{{ view.runtime.mode }}</div></div>
+</div>
+<p>Integration: {{ view.integration_evidence }} · Investment: {{ view.investment_evidence }}</p>
+<h2>Unmet runtime prerequisites</h2>
+<ul>{% for name in view.unmet_runtime_prerequisites %}<li>{{ name }}</li>{% endfor %}</ul>
+<h2>Unsigned owner pilot review</h2>
+<p>Account, approved capital, universe, overnight policy, limits, duration, monitoring, observation and recovery remain unresolved. The requested USD 1,000 is not funding or consent.</p>
+<fieldset disabled aria-label="Unavailable live controls">
+  <legend>Actual live controls unavailable</legend>
+  <button type="button">Approve intent</button><button type="button">Activate pilot</button><button type="button">Resume live</button>
+</fieldset>
+<details><summary>Exact unsigned package — {{ view.package.status }}</summary><pre>{{ view.package | tojson(indent=2) }}</pre></details>
+{% if view.mock %}
+<h2>{{ view.mock.label }}</h2>
+<p>Scope: {{ view.scope.account_alias }} / {{ view.scope.run_id }} / {{ view.scope.mode }}. As of {{ view.as_of }}.</p>
+<p>Mock cash {{ view.mock.cash }} · reserved {{ view.mock.reserved_cash }} · paused {{ view.mock.paused }} · resumed {{ view.mock.resumed }} · revoked {{ view.mock.revoked }}.</p>
+<p>Stored approvals may now be stale, consumed or invalidated. A prior pass does not reauthorize a current intent.</p>
+<div class="research-table" tabindex="0" aria-label="Readiness checks"><table><thead><tr><th>Mock prerequisite</th><th>Current check</th><th>Evidence / reason</th></tr></thead><tbody>
+{% for c in view.mock.readiness.checks %}<tr><td>{{ c.name }}</td><td>{{ "satisfied in fixture" if c.satisfied else "unmet" }}</td><td>{{ c.detail }}</td></tr>{% endfor %}
+</tbody></table></div>
+<h2>Exact intents, risk/evidence bindings, expiry and outcomes</h2>
+{% for order in view.orders %}<details open><summary>{{ order.intent.intent_id }} — {{ order.status }}</summary><pre>{{ order | tojson(indent=2) }}</pre></details>{% else %}<p>No matching mock intent.</p>{% endfor %}
+<h2>Application approval audit trail — MOCK ONLY</h2>
+{% for approval in view.approvals %}<details open><summary>{{ approval.kind }} · consumed {{ approval.consumed }} · revoked {{ approval.revoked }}</summary><pre>{{ approval | tojson(indent=2) }}</pre></details>{% endfor %}
+<h2>Committed events, before/after state and rechecks</h2>
+<p>Coverage: {{ view.coverage.audit_returned }} latest events of {{ view.coverage.audit_total }}; {{ view.coverage.approvals_returned }} approvals of {{ view.coverage.approvals_total }}; {{ view.coverage.orders_returned }} matching orders of {{ view.coverage.orders_total }} in this mock account.</p>
+{% for event in view.audit %}<details><summary>{{ event.sequence }} · {{ event.at }} · {{ event.event_type }}</summary><pre>{{ event.payload | tojson(indent=2) }}</pre></details>{% endfor %}
+{% else %}<p>No scoped mock journal selected. Empty evidence is not readiness.</p>{% endif %}
+{% endblock %}

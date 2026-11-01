@@ -466,6 +466,22 @@ def build_parser() -> argparse.ArgumentParser:
     demo_parser.add_argument("--out-dir", default=None, help="local research artifact directory")
     demo_parser.set_defaults(func=_run_learning_demo)
 
+    supervised_parser = subparsers.add_parser(
+        "supervised",
+        help="M6 mock verification and unsigned package; never activates",
+        parents=[config_parent],
+    )
+    supervised_sub = supervised_parser.add_subparsers(dest="supervised_command", required=True)
+    supervised_demo = supervised_sub.add_parser(
+        "demo", help="offline separate-process fake transport"
+    )
+    supervised_demo.add_argument("--out-dir", default=".data/supervised")
+    supervised_demo.set_defaults(func=_run_supervised_demo)
+    supervised_package = supervised_sub.add_parser(
+        "package", help="print unsigned owner decision worksheet"
+    )
+    supervised_package.set_defaults(func=_run_supervised_package)
+
     backtest_parser = subparsers.add_parser(
         "backtest", help="deterministic backtest", parents=[config_parent]
     )
@@ -558,6 +574,26 @@ def build_parser() -> argparse.ArgumentParser:
     )
     serve_parser.set_defaults(func=_run_serve)
     return parser
+
+
+def _run_supervised_demo(args: argparse.Namespace) -> int:
+    from ..supervised.demo import run_demo
+
+    result = run_demo(Path(args.out_dir))
+    print("M6_MOCK_ONLY — injected fake transport in a separate process")
+    print("authority: LIVE_NOT_AUTHORIZED; actual live controls: unavailable")
+    print(f"software: {result['software_evidence']}")
+    print("integration: EXTERNAL_VALIDATION_PENDING; investment: EXTERNAL_VALIDATION_PENDING")
+    print(f"cash: {result['cash']}; reserved: {result['reserved_cash']}; explicit resume required")
+    print(f"journal: {result['journal']}")
+    return 0
+
+
+def _run_supervised_package(args: argparse.Namespace) -> int:
+    from ..supervised.package import unsigned_package
+
+    print(json.dumps(unsigned_package(), indent=2))
+    return 0
 
 
 def _run_learning_demo(args: argparse.Namespace) -> int:

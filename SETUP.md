@@ -174,6 +174,22 @@ produce a passing badge. The publication report records actual results. Tests
 use fixtures; a subset exercises a local database, so full-suite results can
 also depend on database availability. No test is permission to submit a real order.
 
+### Supervised readiness is an offline mock task
+
+```bash
+uv run trading-agent supervised package
+uv run trading-agent supervised demo
+```
+
+These commands use no broker token or live transport and never activate a pilot.
+The demo writes a new fictional journal/report/unsigned package each time. Read
+[the M6 report and owner runbook](docs/supervised_readiness.md) for mock browser
+QA, exact checks, unresolved fields and future owner-operated procedures.
+`config/pilot.simulation.yaml` is a separate USD 1,000 synthetic feasibility
+profile; live capital remains zero and the original limits remain unchanged.
+Actual readiness controls and real gateway/OAuth remain unavailable. Do not
+remove the startup/schema or live-dispatch guard to run an integration check.
+
 ## 6. LM Studio, data, and broker dependencies
 
 No model server is required for the quick start. Local inference modules exist,

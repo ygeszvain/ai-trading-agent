@@ -18,6 +18,12 @@ labels, bounded challenger comparisons, a frozen champion, and a blocked
 promotion proposal. Read [research learning](docs/research_learning.md) for current
 acceptance and limitations; the publication report remains historical evidence.
 
+Prompt 11 adds [supervised-readiness controls](docs/supervised_readiness.md),
+a read-only approval/audit view and an [unsigned pilot worksheet](docs/supervised_activation_package.unsigned.json).
+`uv run trading-agent supervised demo` exercises a separate child process and
+injected fake transport. `uv run trading-agent supervised package` prints the
+unresolved worksheet. Neither command can activate or access a financial account.
+
 **Financial authority: LIVE_NOT_AUTHORIZED. Approved live capital: USD 0.**
 Profitability is an unproven research hypothesis. Synthetic reports demonstrate
 software behavior and do not establish an investment edge. This is research
@@ -109,10 +115,10 @@ The [build plan](docs/Robinhood_Local_AI_Trading_Build_Plan.md),
 product and boundaries. [Build status](docs/build_status.md) retains the original
 M0 acceptance evidence; the publication addendum distinguishes the current
 snapshot from completed milestones. No later milestone is certified by this
-publication. Prompts 9 and 10 were explicitly selected separately. Prompt 10
-fixes boundary defects but reports overall readiness **FAIL** (156 passed / 3
-failed tests). The next numbered task is **Prompt 11**, only when selected;
-earlier acceptance and operational dependencies remain unresolved.
+publication. Prompts 9–11 were explicitly selected separately. M6 mock controls pass their
+focused checks; actual readiness remains **BLOCKED** (full suite: 222 passed /
+3 existing failures). The next numbered task is **Prompt 12**, only when
+selected; earlier acceptance and operational dependencies remain unresolved.
 
 ## License
 

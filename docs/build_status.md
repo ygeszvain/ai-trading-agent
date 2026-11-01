@@ -1,9 +1,84 @@
 # Trading agent build status
 
-**Last updated:** 2026-11-01 (Prompt 10 security review; historical evidence retained)
+**Last updated:** 2026-11-01 (Prompt 11 mock supervised-readiness controls; historical evidence retained)
 **Current financial authority:** LIVE_NOT_AUTHORIZED
 **Approved live capital:** 0 USD (requested USD 1,000 pilot: recorded, activation pending — plan section 24)
-**Next numbered task:** Prompt 11 only if selected — readiness remains blocked by unresolved upstream failures
+**Next numbered task:** Prompt 12 only if selected — actual live readiness remains blocked
+
+## Prompt 11 — Supervised-live readiness, without activation (M6 controls)
+
+Implemented the explicitly selected control-code/mock-verification scope on
+`codex/supervised-readiness`. **Live readiness remains BLOCKED / LIVE_NOT_AUTHORIZED**.
+The [implementation report and owner runbook](supervised_readiness.md) and
+[concrete unsigned package](supervised_activation_package.unsigned.json) retain
+unresolved decisions and distinguish software, integration and investment evidence.
+
+### What works
+
+- Strict immutable scope/grant/intent/approval contracts; all material amounts,
+  target, price constraints, versions, evidence, risk snapshot and expiry bind
+  into canonical hashes. Single-use approval and revocation/expiry checks.
+- Full mock readiness gate, existing deterministic risk engine recheck, frozen
+  strategy manifest/settings and complete policy bindings, fresh account/data/
+  reconciliation/audit/eligibility/session evidence. Actual dispatch always denied.
+- Separate child-process executor demonstration, exact injected fake transport,
+  no real transport or credentials. Transactional account locking, monotonic
+  worker-generation fencing, explicit resume, worst-case capacity reservations,
+  and durable before/after attempt/audit records. Final locked clock/consent/risk
+  check immediately before the fake call. No broker idempotency claim.
+- UNKNOWN/reserved state on exceptions; no automatic retry or silent restart.
+  Separate broker-approval requirement, partial/duplicate fills, cancel/fill race,
+  fee-inclusive buy/sell accounting, discrepancy/rejected-evidence preservation,
+  shutdown/pause/revocation that do not claim cancellation or liquidation.
+- Read-only `/readiness` + `/api/v1/readiness`, exact mock bindings and audit
+  coverage, USD 1,000 inactive request versus USD 0 approved. Every actual control
+  POST is server-denied. Browser reads invoke no executor, broker or model calls.
+- Five additive SQLAlchemy/Alembic M6 journal tables; prior incompatible schema
+  contracts remain unrepaired/blocked. A separate USD 1,000 synthetic feasibility
+  profile preserves zero live capital, disabled live mode and existing limits.
+
+### Exact commands and observed results
+
+| Command / check | Actual result |
+| --- | --- |
+| `uv run trading-agent supervised package` | Prints UNSIGNED_BLOCKED owner worksheet; no signature, no activation loader, capital 0 |
+| `uv run trading-agent supervised demo --out-dir .data/m6-review` | **PASS**, separate child PID, injected fake, two fills; cash 989.990, reserves 0.000, explicit resume required; reports LIVE_NOT_AUTHORIZED and external evidence pending |
+| `TRADING_AGENT_M6_REVIEW_DB=postgresql+psycopg://review@127.0.0.1:55433/m6_review uv run pytest tests/supervised -q` | **66 passed**, 1 existing deprecation warning; includes real disposable PostgreSQL lock/fence tests, no skipped DB cases |
+| Both dedicated review DB env vars + `uv run pytest -q` | **222 passed, 3 failed**, 1 warning; unchanged economic regime/whipsaw/fold-edge assertions remain failing |
+| `uv run ruff check src/trading_agent/supervised tests/supervised src/trading_agent/db/schema.py src/trading_agent/web/app.py src/trading_agent/cli/main.py` | **PASS** |
+| `uv run mypy --follow-imports=silent -p trading_agent.supervised` | **PASS**, 11 source files; imported broader code excluded from this scoped result |
+| `uv run ruff check src tests` | **FAIL**, 61 existing broader findings |
+| `uv run mypy` | **FAIL**, 122 errors / 24 files, 108 checked |
+| `uv run python -m compileall -q src tests`; `node --check src/trading_agent/web/static/app.js`; `node --check tests/supervised/browser_checks.js` | **PASS** |
+| Disposable M6 migration upgrade / inspect / downgrade / upgrade | **PASS** five new tables/columns/FKs, unrelated fixture witness retained; new head `d8c302b4a611`; prior schema compatibility guard still blocks normal startup |
+| Playwright `-s=m6-review run-code --filename tests/supervised/browser_checks.js` | **PASS** persisted mock read page, exact hashes, disabled controls + five POST denials, explicit evidence tracks/coverage, desktop 1440×1000 and narrow 390×844, zero page errors/external origins; screenshots inspected |
+
+Changed files: new `supervised/{contracts,readiness,journal,executor,fake,fixtures,
+worker,demo,view,package}.py` + package marker; additive schema/migration; CLI;
+readiness template/routes/navigation/styles; small simulation profile; focused
+control/process/PostgreSQL/read-only API/browser tests; package/runbook and
+README/SETUP/architecture/website/AGENTS/status documentation. No original live
+gate/refusing broker adapter, champion, objective, holdout, failing economic
+assertion or existing risk limit was relaxed.
+
+### Boundaries and remaining evidence
+
+Only mocked consent is executable: literal M6_MOCK_ONLY/fixture-owner and public
+fixture signing material. It cannot authenticate a real owner. A separate mock
+process was demonstrated; separate deployed OS privilege, real signing/secret
+injection and broker runtime remain absent. Normal website startup still stops
+at the earlier schema guard. Existing pipeline, recovery, M4/M5, economic and
+independent-monitoring defects remain FAIL/BLOCKED. No live integration, broker
+mutation/approval/revocation, prospective track record, production restore or
+actual activation was performed. Owner-run checks and unknown official
+revocation details are explicit in the runbook; do not invent an endpoint/menu.
+
+Owner fields remain unresolved: exact account/eligibility, approved capital
+(currently zero), instruments/strategy, actual limits and overnight policy,
+start/expiry, monitoring operator/channel, observation duration and independent
+decisions, recovery/revocation evidence and scoped signed consent. Requested
+USD 1,000 remains a draft ceiling, not authority or funding. Stop at Prompt 11;
+Prompt 12 is next only when explicitly selected, with all blockers preserved.
 
 ## Prompt 10 — Security and failure readiness review
 
@@ -297,15 +372,15 @@ None of these block Prompt 2's offline work.
 | 8 | Full local trading website, monitoring, and forward paper mode (M5) | Pending |
 | 9 | Controlled learning in research | **Offline research scope implemented 2026-11-01**; evidence above, real prospective integration pending |
 | 10 | Security and failure-readiness review | **Review complete 2026-11-01**; concrete fixes/tests and matrix recorded; overall readiness FAIL |
-| 11 | Supervised-live readiness; activation disabled (M6) | Pending |
+| 11 | Supervised-live readiness; activation disabled (M6) | **Mock control scope implemented 2026-11-01**; actual readiness BLOCKED |
 | 12 | Bounded-autonomy readiness; activation disabled (M7/M8) | Pending |
 
 ## Next action
 
-Prompt 10 stops with a local, reviewable security/failure report and concrete
-patches. Prompt 11 is next only when explicitly selected, and readiness remains
-blocked by the schema, recovery, economic and operational gaps above. Resolve
-those with scoped work before claiming earlier M1–M5 acceptance. Do not connect
-accounts, promote, deploy, increase capital or trade from this review.
+Prompt 11 stops with reviewed control code, mocked verification, an unsigned
+package and owner/integration dependencies. Prompt 12 is next only when
+explicitly selected. Resolve earlier schema, integrated recovery, economic and
+monitoring failures before any real readiness claim. No account linking,
+funding, promotion, production deployment or trading is authorized.
 
 Current financial authority: **LIVE_NOT_AUTHORIZED**.
