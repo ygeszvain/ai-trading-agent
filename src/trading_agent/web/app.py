@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import hmac
 from collections.abc import Awaitable, Callable, Iterator
+import sys
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -30,6 +31,7 @@ from sqlalchemy.orm import Session
 from starlette.responses import Response
 
 from ..config.models import TradingConfig, TradingMode
+from ..security.loopback import is_loopback_url
 from ..db.engine import create_app_engine, open_session
 from ..db.migrate import run_migrations
 from . import auth as auth_module
@@ -315,7 +317,7 @@ def _fills(
     return get_fills(session, config, run_id, order_id)
 
 
-def serve(config: TradingConfig) -> None:
+def serve(config: TradingConfig, host: str | None = None, port: int | None = None) -> None:
     """Run the website: bootstrap owner auth, migrate, and serve on loopback."""
     path, created = auth_module.ensure_bootstrap()
     store = auth_module.load_store(path)
@@ -325,6 +327,14 @@ def serve(config: TradingConfig) -> None:
         print("store this token; it is shown only once and cannot be recovered from the file.")
     else:
         print(f"owner token exists at {path} (delete the file to re-bootstrap)")
+    if host is not None or port is not None:
+        config = config.model_copy(deep=True)
+        config.app = config.app.model_copy(
+            update={
+                "web_host": host if host is not None else config.app.web_host,
+                "web_port": port if port is not None else config.app.web_port,
+            }
+        )
     print(f"authority: {config.authority()}  mode: {config.app.mode.value.upper()}")
     print("serving SIMULATION data only; no live order controls exist.")
     try:
@@ -336,4 +346,11 @@ def serve(config: TradingConfig) -> None:
     url = f"http://{config.app.web_host}:{config.app.web_port}"
     print(f"website: {url}  (owner login at {url}/auth/login)")
     app = build_app(config, auth_store=store)
+    if not is_loopback_url(f"http://{config.app.web_host}:{config.app.web_port}"):
+        print(
+            f"ERROR: refusing to bind {config.app.web_host} (non-loopback)",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
     uvicorn.run(app, host=config.app.web_host, port=config.app.web_port, log_level="warning")
+    return 0

@@ -19,10 +19,22 @@ htmlcov/
 build/
 dist/
 *.egg-info/
-data/
-state/
-logs/
-runs/
+/data/
+/state/
+/logs/
+/runs/
+/reports/
+/data_cache/
+/.data/
+/.trading-agent/
+/.rebase-backup/
+.hypothesis/
+*.sqlite
+*.sqlite3
+*.db
+*.dump
+*.backup
+webauth.json
 
 # Operating-system metadata
 .DS_Store

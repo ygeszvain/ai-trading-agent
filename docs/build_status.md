@@ -1,9 +1,33 @@
 # Trading agent build status
 
-**Last updated:** 2026-10-31 (Prompt 1 / M0 complete)
+**Last updated:** 2026-11-01 (publication addendum; M0 evidence retained)
 **Current financial authority:** LIVE_NOT_AUTHORIZED
 **Approved live capital:** 0 USD (requested USD 1,000 pilot: recorded, activation pending — plan section 24)
 **Next task:** Prompt 2 — first offline trading slice and local website (M1)
+
+## Open source publication — November 1, 2026
+
+The owner authorized publishing the code to the public repository
+https://github.com/ygeszvain/ai-trading-agent. README, setup instructions, MIT
+license, contribution/security guidance, package metadata, and local-state
+exclusions were prepared. Existing later-stage source and working-tree changes
+are included as an **experimental snapshot**, not as accepted milestones.
+
+The earlier broad `data/` ignore rule hid the required source package; it is now
+anchored to repository-root runtime data. The simulation profile disables broker
+shadow polling. Live capital remains zero and cloud fallback remains disabled.
+
+Clean-export checks: configuration/status/backtest/evaluation commands pass;
+pytest reports **87 passed, 21 failed**; Ruff reports **149 findings**; mypy reports
+**168 errors in 31 files**. Build succeeds. Full commands, changed-file categories,
+source/history review, acceptance gaps, and owner-run checks not performed are in
+[publication_status.md](publication_status.md). Read that report and
+[SETUP.md](../SETUP.md) before using historical commands below.
+
+The following M0 report is historical evidence from October 31. Its assertions
+about absent source/UI are not current feature inventory. The numbered task
+handoff remains **Prompt 2 acceptance reconciliation** before advancing; this
+publication does not certify M1 or any later milestone.
 
 ## M0 — Repository, environment, and persistent boundaries
 
@@ -108,8 +132,9 @@
    funding) — blocks M6/M7 activation screens; not needed for M1.
 4. **Data provider/budget decision** (M3) — blocks real historical data;
    fixtures proceed.
-5. **Remote repository selection** (none exists) — blocks any push; local
-   commits only for now.
+5. **Remote repository selection** — resolved for publication on November 1:
+   `ygeszvain/ai-trading-agent`; see the publication addendum. Historical M0
+   evidence below predates that selection.
 
 None of these block Prompt 2's offline work.
 

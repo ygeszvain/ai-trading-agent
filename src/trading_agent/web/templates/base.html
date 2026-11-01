@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trading-agent — {{ label }}</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body data-page="{{ page | default('') }}">
+<header>
+  <span class="title">trading-agent</span>
+  <span class="badge {{ label | lower }}">{{ label }}</span>
+  <span class="muted mono">{{ authority }}</span>
+  <nav>
+    <a href="/">Overview</a>
+    <a href="/portfolio">Portfolio</a>
+    <a href="/orders">Orders</a>
+    <a href="/activity">Activity</a>
+    <a href="/auth/logout" rel="nofollow">Logout</a>
+  </nav>
+</header>
+<main>
+  {% block content %}{% endblock %}
+</main>
+<footer>read-only website · no order controls exist · {{ web_url }}</footer>
+</body>
+</html>

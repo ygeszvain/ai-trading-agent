@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>trading-agent — owner login</title>
+<link rel="stylesheet" href="/static/style.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body data-page="login">
+<div id="login-box">
+  <h1 style="margin-top:0">trading-agent</h1>
+  <p class="muted"><span class="badge {{ label | lower }}">{{ label }}</span> owner login</p>
+  <form data-login-form>
+    <label for="token">Owner token</label>
+    <input id="token" name="token" type="password" autofocus autocomplete="off" required>
+    <button type="submit">Sign in</button>
+  </form>
+  <p class="error" data-login-error>{{ error or "" }}</p>
+</div>
+</body>
+</html>

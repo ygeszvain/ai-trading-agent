@@ -190,32 +190,37 @@ def run_single_book(
     result = SingleBookResult(instrument_id=instrument_id, rule=rule)
     for session in sessions:
         mark = series.value_on(session)
+        stale = mark is None
         if mark is None:
             result.data_gaps += 1
             mark = series.value_through(session)  # stale mark; gap counted, never filled
             if mark is None:
                 continue  # warm-up before the first observation
         cash + quantity * mark
-        momentum = momentum_over_window(series.up_to(session, rule.lookback + 1), rule.lookback)
-        if quantity > 0 and momentum is not None and momentum <= rule.exit_momentum:
-            gross = quantity * mark
-            fee = round_money(gross * cost_rate)
-            cash += gross - fee
-            result.cost_paid += fee
-            result.fills.append((session, "sell", mark, Decimal("0"), fee))
-            quantity = Decimal("0")
-        elif quantity == 0 and momentum is not None and momentum >= rule.entry_momentum:
-            notional = (cash + Decimal("0")) * settings.target_weight
-            notional += Decimal("0")  # no position while flat: only cash is deployable
-            candidate = (notional / mark).quantize(_QUANTITY_EXP, rounding=ROUND_DOWN)
-            if candidate > 0:
-                price = candidate * mark
-                fee = round_money(price * cost_rate)
-                if cash >= price + fee:
-                    cash -= price + fee
-                    quantity = candidate
-                    result.cost_paid += fee
-                    result.fills.append((session, "buy", mark, candidate, fee))
+        if not stale:
+            momentum = momentum_over_window(series.up_to(session, rule.lookback + 1), rule.lookback)
+            if quantity > 0 and momentum is not None and momentum <= rule.exit_momentum:
+                gross = quantity * mark
+                fee = round_money(gross * cost_rate)
+                cash += gross - fee
+                result.cost_paid += fee
+                result.fills.append((session, "sell", mark, Decimal("0"), fee))
+                quantity = Decimal("0")
+            elif quantity == 0 and momentum is not None and momentum >= rule.entry_momentum:
+                notional = (cash + Decimal("0")) * settings.target_weight
+                notional += Decimal("0")  # no position while flat: only cash is deployable
+                # Size on net-of-fee capacity: price*(1 + cost_rate) <= cash,
+                # otherwise the fee check below can never pass and no entry
+                # fill ever occurs.
+                candidate = (notional / (Decimal(1) + cost_rate) / mark).quantize(_QUANTITY_EXP, rounding=ROUND_DOWN)
+                if candidate > 0:
+                    price = candidate * mark
+                    fee = round_money(price * cost_rate)
+                    if cash >= price + fee:
+                        cash -= price + fee
+                        quantity = candidate
+                        result.cost_paid += fee
+                        result.fills.append((session, "buy", mark, candidate, fee))
         cash = round_money(cash * factor)  # daily yield accrual (paper-ledger convention)
         result.curve.append((session, round_money(cash + quantity * mark)))
     result.final_equity = result.curve[-1][1] if result.curve else settings.initial_cash

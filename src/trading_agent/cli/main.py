@@ -537,7 +537,36 @@ def build_parser() -> argparse.ArgumentParser:
         "version", help="print the application version", parents=[config_parent]
     )
     version_parser.set_defaults(func=_run_version)
+    serve_parser = subparsers.add_parser(
+        "serve",
+        help="run the read-only website (M5; owner-token login, no order controls)",
+        parents=[config_parent],
+    )
+    serve_parser.add_argument(
+        "--host", default=None, help="bind host (default: web.web_host in config)"
+    )
+    serve_parser.add_argument(
+        "--port", type=int, default=None, help="bind port (default: web.web_port in config)"
+    )
+    serve_parser.set_defaults(func=_run_serve)
     return parser
+
+
+def _run_serve(args: argparse.Namespace) -> int:
+    path = _resolve_config_path(args.config)
+    if not path.exists():
+        print(f"error: config file not found: {path}", file=sys.stderr)
+        return 2
+    try:
+        config = load_config(path, ConfigEnvironment())
+    except ConfigError as error:
+        print("CONFIGURATION ERROR:", file=sys.stderr)
+        for violation in error.violations:
+            print(f"  - {violation}", file=sys.stderr)
+        return 2
+    from ..web.app import serve  # lazy: uvicorn is only required for ``serve``
+
+    return serve(config, host=args.host, port=args.port)
 
 
 def _run_version(args: argparse.Namespace) -> int:

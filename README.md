@@ -1,96 +1,109 @@
-# Trading agent — single-owner local research/trading application
+# AI Trading Agent
 
-A local application that will research (LM Studio, local inference) and
-eventually trade through Robinhood's official external-agent MCP interface,
-governed by deterministic risk, authorization, ledger, and reconciliation
-services. **Profitability is an unproven research hypothesis.**
+An open source, local Python application for trading research, synthetic market
+simulation, and inspecting persisted trading activity. Research inference is
+designed for LM Studio. Deterministic configuration, risk, authorization, ledger,
+and reconciliation services govern financial behavior.
 
-**Current state (2026-10-31): M0 foundation complete.** The repository
-contains the project scaffolding, typed fail-closed configuration, a broker
-interface whose unavailable implementations explicitly reject execution, a
-deterministic live-activation gate, a verified disposable local database, and
-the M0 documentation set. No trading engine, website, or financial integration
-exists yet.
+**Experimental development snapshot — November 1, 2026.** The repository includes
+simulation, backtesting, economic evaluation, research, gateway scaffolding,
+learning experiments, and an authenticated local website. These components are
+at different stages of verification. The full test suite currently has failures;
+see [verification and known limitations](docs/publication_status.md).
 
-- Current financial authority: **LIVE_NOT_AUTHORIZED**
-- Approved live capital: **0 USD** (requested USD 1,000 pilot: recorded in
-  build plan section 24, activation pending)
-- Next task: **Prompt 2 (M1)** — first offline trading slice + first website
-  pages. One numbered prompt at a time from
-  [docs/Trading_Agent_Codex_Prompts.txt](docs/Trading_Agent_Codex_Prompts.txt).
+**Financial authority: LIVE_NOT_AUTHORIZED. Approved live capital: USD 0.**
+Profitability is an unproven research hypothesis. Synthetic reports demonstrate
+software behavior and do not establish an investment edge. This is research
+software, not a supported live trading product.
 
-## Setup and validation (M0, all offline)
+## Quick start
 
-Prerequisite: `uv` (e.g. `brew install uv`).
-
-```bash
-uv sync                                  # create .venv (Python 3.13) from uv.lock
-uv run ruff check .                      # lint
-uv run mypy                             # strict type checks
-uv run pytest                           # 51 tests
-uv run trading-agent check-config        # configuration smoke check (exit 0)
-uv run trading-agent check-config --probe-llm   # adds a read-only LM Studio model-list probe
-uv run trading-agent capabilities        # sanitized broker capabilities + authority
-```
-
-Optional disposable database (loopback-only; never touches the dissertation
-Postgres on port 5432):
+Prerequisites: Git, [uv](https://docs.astral.sh/uv/getting-started/installation/),
+and Python 3.13. The project pins Python through `.python-version`; `uv` can
+provision it if necessary. Installing dependencies needs network access; the
+synthetic commands below require no broker, model server, data key, or database.
 
 ```bash
-docker compose up -d                     # PostgreSQL 17 on 127.0.0.1:5433
-psql -h 127.0.0.1 -p 5433 -U trading_agent -d trading_agent
-docker compose down                      # stop (data volume kept; add -v to remove)
+git clone https://github.com/ygeszvain/ai-trading-agent.git
+cd ai-trading-agent
+uv sync --locked
+uv run trading-agent --help
+uv run trading-agent check-config
+uv run trading-agent status
+uv run trading-agent backtest run
 ```
 
-Configuration lives in `config/simulation.yaml` with `.env.example` as the
-blank-secret template (copy to `.env`, gitignored). Invalid financial
-configuration fails at startup with every violation listed
-(`trading-agent check-config` exits 2). Live trading cannot be activated by
-any single flag: the activation gate requires twelve prerequisites, none of
-which can be satisfied in the delivered configuration.
+The default profile uses fictional `TEST_A`, `TEST_B`, and `TEST_C` instruments.
+Real data, research inference, and broker shadow polling are disabled in that
+profile. Live execution, cloud inference fallback, and paid subscriptions remain
+disabled. Monetary values use Decimal or integer units in backend services.
 
-## Project files
+The backtest writes `report.md`, `results.json`, `equity.csv`, `fills.csv`, and
+`equity_curve.svg` under `reports/<backtest-id>/`. Reports and local state are
+ignored by Git. Report generation currently succeeds, but accounting/benchmark
+and evaluation limitations remain open; do not rely on its metrics for capital
+allocation. Backtest capital and the persisted simulator's paper capital are
+separate settings; inspect `backtest` and `paper` in the configuration.
 
-| File | Purpose |
+For a versioned synthetic economic-evaluation report:
+
+```bash
+uv run trading-agent eval TEST_A --out-dir reports/evaluation
+```
+
+## Local website and complete instructions
+
+Follow [SETUP.md](SETUP.md) for configuration, optional PostgreSQL, migrations,
+owner-token login, website startup, tests, troubleshooting, and shutdown.
+The website binds to `http://127.0.0.1:8000` and reads persisted database state;
+running a file-based backtest does not populate its portfolio. The delivered
+pages cover Overview, Activity, Orders/fills, Portfolio, and instrument details.
+Full website acceptance and browser verification remain pending.
+
+Do not publish the application server, expose a tunnel, or connect a financial
+account as part of this quick start. Publishing this source repository does not
+activate trading or deploy a service.
+
+## Development and contribution
+
+```bash
+uv sync --locked
+uv run pytest -q
+uv run ruff check src tests
+uv run mypy
+```
+
+These are real checks, not an all-green claim. Known failures are recorded in
+[publication_status.md](docs/publication_status.md). Please retain failed results
+and evaluation objectives when contributing. Read [CONTRIBUTING.md](CONTRIBUTING.md)
+and [AGENTS.md](AGENTS.md) before changing code. Use synthetic data and keep
+credentials, account data, and private logs out of issues and pull requests.
+See [SECURITY.md](SECURITY.md) for vulnerability reporting.
+
+## Project map
+
+| Location | Purpose |
 | --- | --- |
-| [AGENTS.md](AGENTS.md) | Persistent scope, workflow, authority, and boundaries |
-| [CODEX_START.md](CODEX_START.md) | The original Prompt 1 (M0) — now executed |
-| [Build plan](docs/Robinhood_Local_AI_Trading_Build_Plan.md) | Governing product specification |
-| [Prompt pack](docs/Trading_Agent_Codex_Prompts.txt) | 12-step implementation sequence; current task: Prompt 2 |
-| [Website specification](docs/Local_Trading_Website_Spec.md) | Full website contract and acceptance scenarios |
-| [Build status](docs/build_status.md) | Milestone ledger, M0 evidence, and next action |
-| [Architecture](docs/architecture.md) | Trust planes, module map, config/gate/persistence design |
-| [Website contract](docs/website.md) | Routes, auth, scoping, read-model/event contracts, M1/M5 backlog |
-| [Capability matrix](docs/capability_matrix.md) | Facts / assumptions / pending owner-run verifications |
-| [Decision log](docs/decision_log.md) | M0 decisions with rationale and reversibility |
-| [Migration record](docs/migration_record.md) | What was recovered, verified, and left unresolved |
-| [Source manifest](SOURCE_MANIFEST.json) | Original and current document hashes |
-| [Checksums](CHECKSUMS.sha256) | Integrity checks for the handoff files |
+| `src/trading_agent/config`, `contracts`, `gates` | Typed settings, contracts, activation checks |
+| `src/trading_agent/fixtures`, `data`, `strategies` | Synthetic inputs, data-provider scaffolding, numerical rules |
+| `src/trading_agent/risk`, `execution`, `ledger` | Risk checks, execution state, accounting and reconciliation |
+| `src/trading_agent/engine`, `backtest`, `evaluation` | Persisted simulation, file reports, evaluation protocols |
+| `src/trading_agent/research`, `learning`, `gateway` | Experimental research, challengers, gateway contracts |
+| `src/trading_agent/web` | FastAPI routes, local templates and assets |
+| `migrations` | Alembic database revisions |
+| `tests` | Unit, property, evaluation, and experimental learning checks |
 
-## Scope and sequencing
+The [build plan](docs/Robinhood_Local_AI_Trading_Build_Plan.md),
+[prompt pack](docs/Trading_Agent_Codex_Prompts.txt), and
+[website specification](docs/Local_Trading_Website_Spec.md) describe the intended
+product and boundaries. [Build status](docs/build_status.md) retains the original
+M0 acceptance evidence; the publication addendum distinguishes the current
+snapshot from completed milestones. No later milestone is certified by this
+publication. The next numbered task remains **Prompt 2 acceptance reconciliation**
+before continuing sequential development.
 
-Run the numbered prompt pack one prompt at a time. Prompt 1 (M0) is complete;
-do not run the older plan's combined section 26 kickoff. The website starts
-with persisted synthetic data in Prompt 2 (M1): Overview, Activity,
-Orders/fills with detail, Portfolio/instrument detail, and basic charts
-(see [docs/website.md](docs/website.md)). Prompt 8 (M5) completes all pages,
-live updates, exports, and mode-permitted controls. No broker connection is
-needed to build and inspect the website.
+## License
 
-The owner's requested USD 1,000 observation pilot is recorded in build plan
-section 24 with the future authenticated approval flow. Requested capital and
-active trading authority are separate: checked-in live capital remains zero,
-and no funding or activation has occurred.
-
-## Authority and limits
-
-- Development uses fixtures, simulation, and paper mode by default.
-- Approved live capital is zero. Current financial authority:
-  **LIVE_NOT_AUTHORIZED**.
-- Original platform findings are dated source material; recheck uncertain
-  APIs and capabilities against current primary documentation during
-  implementation.
-- No remote repository is configured; local commits only. Original source
-  documents are preserved in Git history.
-
-Codex project-instruction reference: [official AGENTS.md documentation](https://learn.chatgpt.com/docs/agent-configuration/agents-md).
+[MIT](LICENSE), copyright 2026 Randy Geszvain and contributors. Dependencies,
+model weights, broker services, and datasets retain their own licenses and terms.
+No model weights, financial credentials, or market datasets are distributed here.

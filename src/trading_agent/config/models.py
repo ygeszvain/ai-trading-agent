@@ -13,6 +13,7 @@ Design rules:
 from __future__ import annotations
 
 import os
+import re
 from datetime import UTC, date, datetime
 from decimal import Decimal
 from enum import StrEnum
@@ -119,6 +120,81 @@ class AppSettings(BaseModel):
                 f"timezone {value!r} is not an IANA zone name (expected e.g. America/Chicago)"
             )
         return value
+
+
+class WebSettings(BaseModel):
+    """Website settings (M5, website spec section 22: off by default).
+
+    The token has exactly three possible sources, in precedence order:
+    1. an explicit value (``web.token``, e.g. via the TRADING_AGENT_WEB_TOKEN
+       environment variable),
+    2. an environment-variable reference (``web.token_env``: the *name* of the
+       variable, never its value, in this file),
+    3. a bootstrap file (``web.token_file``) generated for local development.
+    A live mode requires source 1 or 2 — never the bootstrap file.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False  # the website is OFF by default (website spec 22)
+    token: SecretStr | None = None
+    token_env: str | None = None
+    token_file: str = ".data/web_token"
+    session_ttl_seconds: int = Field(default=28800, ge=60)  # 8h, max age for web cookies
+    stream_poll_seconds: float = Field(default=5.0, gt=0, le=60)
+    stream_idle_timeout_seconds: float = Field(default=900, gt=0, le=3600)
+    login_rate_limit: int = Field(default=10, ge=1)
+    login_rate_window_seconds: int = Field(default=900, ge=10)
+    logout_invalidates: bool = True
+
+    @field_validator("token_env")
+    @classmethod
+    def _validate_token_env(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
+            raise ValueError(
+                f"web.token_env: {value!r} is not a valid environment variable name"
+            )
+        return value
+
+    @model_validator(mode="after")
+    def _validate_token_sources(self) -> WebSettings:
+        if self.token is not None and self.token_env is not None:
+            raise ValueError(
+                "web: set exactly one of web.token (explicit value) or "
+                "web.token_env (environment variable reference)"
+            )
+        if self.token is not None and not self.token.get_secret_value().strip():
+            raise ValueError("web.token: an explicit token must be non-empty")
+        return self
+
+    def resolved_token(self) -> str | None:
+        """The token to use, if configured. Never logged, never echoed."""
+        if self.token_env:
+            value = os.environ.get(self.token_env)
+            return value.strip() if value and value.strip() else None
+        if self.token is not None:
+            value = self.token.get_secret_value().strip()
+            return value if value else None
+        return None
+
+    def token_source(self) -> Literal["value", "env", "file", "none"]:
+        if self.token is not None:
+            return "value"
+        if self.token_env:
+            return "env"
+        return "file" if self.enabled else "none"
+
+    def sanitized_summary(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "token_source": self.token_source(),
+            "token_configured": self.resolved_token() is not None
+            or (self.enabled and bool(self.token_file)),
+            "session_ttl_seconds": self.session_ttl_seconds,
+            "stream_poll_seconds": self.stream_poll_seconds,
+        }
 
 
 class LLMSettings(BaseModel):
@@ -674,6 +750,7 @@ class TradingConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     app: AppSettings = AppSettings()
+    web: WebSettings = WebSettings()
     llm: LLMSettings = LLMSettings()
     broker: BrokerSettings = BrokerSettings()
     live: LiveSettings = LiveSettings()
@@ -729,6 +806,12 @@ class TradingConfig(BaseModel):
             )
 
         if live_mode:
+            if self.web.enabled and self.web.resolved_token() is None:
+                violations.append(
+                    "live mode with web.enabled=true requires an explicit website token "
+                    "(web.token or web.token_env set, e.g. TRADING_AGENT_WEB_TOKEN): the "
+                    "bootstrap file is a development convenience and is forbidden in live"
+                )
             if self.live.approved_capital_usd <= 0:
                 violations.append(
                     "live.approved_capital_usd must be > 0 for a live mode "
@@ -777,6 +860,7 @@ class TradingConfig(BaseModel):
                 "web_port": self.app.web_port,
                 "db_url_host": (urlparse(self.app.db_url).hostname or ""),
             },
+            "web": self.web.sanitized_summary(),
             "llm": self.llm.sanitized_summary(),
             "broker": {
                 "provider": self.broker.provider,

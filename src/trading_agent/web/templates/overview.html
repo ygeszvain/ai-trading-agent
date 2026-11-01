@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block content %}
+<div data-health class="muted">checking…</div>
+<div class="filterbar">
+  <label>Run: <select data-run-select></select></label>
+  <span data-flags-overview class="muted">…</span>
+</div>
+<div data-overview-note class="muted"></div>
+<div data-cards class="cards"></div>
+<div class="chart" data-chart></div>
+<h2>Books</h2>
+<div data-books></div>
+<script>
+  document.querySelectorAll("[data-run-select]").forEach((el) => {
+    TA.api("/api/v1/runs").then((env) => TA.loadRuns(el)).catch(() => {});
+  });
+</script>
+{% endblock %}

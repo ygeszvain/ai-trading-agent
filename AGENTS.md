@@ -6,6 +6,17 @@ Build a single-owner local research/trading application. Codex develops the soft
 
 Prompt 1 (M0) is complete as of 2026-10-31: the foundation, typed fail-closed configuration, broker interface with explicitly rejecting adapters, live-activation gate, verified disposable database, and the M0 documentation set exist (see docs/build_status.md). The next task is Prompt 2 (M1). Inspect docs/build_status.md before claiming progress.
 
+## Publication scope — November 1, 2026
+
+The owner explicitly authorized open source publication to
+`https://github.com/ygeszvain/ai-trading-agent` using existing GitHub
+authentication. This grants the commit/push needed for this publication despite
+the original milestone's no-push boundary. It does not grant service deployment,
+financial-account access, live activation, or advancement through numbered prompts.
+The public snapshot includes later-stage work whose acceptance is incomplete;
+read `docs/publication_status.md` and reconcile Prompt 2 acceptance before claiming
+milestone progress. Preserve the historical M0 evidence in `docs/build_status.md`.
+
 ## Read and execute
 
 - Read applicable AGENTS.md files and inspect the working tree before editing. Preserve user work and any more specific applicable instructions.

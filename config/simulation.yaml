@@ -33,7 +33,7 @@ broker:
   # M4 shadow gateway (plan section 14/17): the persistent, read-only observer
   # on the owner's own Robinhood account via the official MCP. Execution is
   # disabled in every code path; this build never sends a trade instruction.
-  shadow_enabled: true
+  shadow_enabled: false             # public quick start never connects to a broker
   shadow_provider: robinhood      # gateway observes Robinhood; paper keeps simulator
   shadow_poll_seconds: 30
   account_number: null            # owner's account, entered via `trading-agent broker setup`

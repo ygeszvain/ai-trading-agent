@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="filterbar">
+  <label>Run: <select data-run-select></select></label>
+  <label>Status: <select data-status-filter>
+    <option value="">all</option><option>open</option><option>filled</option>
+    <option>canceled</option><option>failed</option>
+  </select></label>
+  <span data-flags-orders class="muted">…</span>
+</div>
+<div data-orders></div>
+<script>
+  document.querySelectorAll("[data-run-select]").forEach((el) => {
+    TA.api("/api/v1/runs").then((env) => TA.loadRuns(el)).catch(() => {});
+  });
+</script>
+{% endblock %}
