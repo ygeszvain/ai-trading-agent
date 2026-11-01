@@ -11,6 +11,12 @@ learning experiments, and an authenticated local website. These components are
 at different stages of verification. The full test suite currently has failures;
 see [verification and known limitations](docs/publication_status.md).
 
+Prompt 9's research-only learning workflow is now implemented in this source
+checkout. Run `uv run trading-agent learning demo` for matured and incomplete
+labels, bounded challenger comparisons, a frozen champion, and a blocked
+promotion proposal. Read [research learning](docs/research_learning.md) for current
+acceptance and limitations; the publication report remains historical evidence.
+
 **Financial authority: LIVE_NOT_AUTHORIZED. Approved live capital: USD 0.**
 Profitability is an unproven research hypothesis. Synthetic reports demonstrate
 software behavior and do not establish an investment edge. This is research
@@ -99,8 +105,8 @@ The [build plan](docs/Robinhood_Local_AI_Trading_Build_Plan.md),
 product and boundaries. [Build status](docs/build_status.md) retains the original
 M0 acceptance evidence; the publication addendum distinguishes the current
 snapshot from completed milestones. No later milestone is certified by this
-publication. The next numbered task remains **Prompt 2 acceptance reconciliation**
-before continuing sequential development.
+publication. Prompt 9 was explicitly selected separately. The next numbered task is
+**Prompt 10**, with earlier Prompt 2–8 acceptance still unresolved.
 
 ## License
 

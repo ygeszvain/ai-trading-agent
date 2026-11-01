@@ -1,32 +1,26 @@
-"""Challenger evaluation: walk-forward folds, decision gates, promotion (plan M4).
+"""Legacy fold diagnostics. Canonical bounded research lives in workflow.py.
 
-``evaluate_challenger`` runs a challenger's rule over a sequence of
-walk-forward folds (the in-sample series plus the *folds* arguments),
-reusing the M3 single-book engine for mark-to-market, then applies the
-learning gates fold by fold.  When every fold passes and the challenger is
-in ``paper`` status, a champion record is produced.  Evaluation input is
-point-in-time; a challenger may only see closes up to the session it acts
-on, and an empty/short fold fails closed.
+Evaluation never creates a champion or grants activation authority.
 """
 
 from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
-from typing import Any, Sequence
+from typing import Any
 
 from ..backtest.engine import (
-    BacktestCostSettings,
     BookSettings,
     CloseSeries,
     momentum_over_window,
     run_single_book,
 )
-from ..config.models import PaperSettings
-from .challenger import Challenger, ChallengerStatus
+from ..config.models import BacktestCostSettings, PaperSettings
+from .challenger import Challenger
 from .labels import LearningError
 from .memory import Champion
 
@@ -93,6 +87,15 @@ class FoldResult:
     hit_rate: Decimal | None
     gates_ok: bool
     gate_reasons: tuple[str, ...] = ()
+    initial_equity: Decimal = Decimal("100000")
+
+    @property
+    def fill_count(self) -> int:
+        return self.n_fills
+
+    @property
+    def traded(self) -> bool:
+        return self.n_fills > 0
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -174,7 +177,7 @@ def _evaluate_fold(
         target_weight=rule.target_weight,
     )
     result = run_single_book(
-        fold, sessions, rule, settings, instrument_id=challenger.instrument
+        fold, list(sessions), rule, settings, instrument_id=challenger.instrument
     )
     total_return = result.metrics.get("total_return", Decimal("0"))
     max_drawdown = result.metrics.get("max_drawdown", Decimal("0"))
@@ -193,13 +196,10 @@ def _evaluate_fold(
             continue
         decisions.append((session, momentum))
     entry_sessions = [
-        (session, momentum)
-        for session, momentum in decisions
-        if momentum >= rule.entry_momentum
+        (session, momentum) for session, momentum in decisions if momentum >= rule.entry_momentum
     ]
     known = 0
     hits = 0
-    current_by_session = {session: momentum for session, momentum in decisions}
     closes = {session: mark for session, mark in ((s, fold.value_on(s)) for s in sessions) if mark}
     for session, _momentum in entry_sessions:
         entry_price = closes.get(session)
@@ -208,8 +208,7 @@ def _evaluate_fold(
         future = [
             closes[future_session]
             for future_session in sessions
-            if future_session > session
-            and closes.get(future_session) is not None
+            if future_session > session and closes.get(future_session) is not None
         ][:1]
         if not future:
             continue
@@ -222,31 +221,28 @@ def _evaluate_fold(
     drawdown_bps = max_drawdown * _BPS
     if gates.max_drawdown_bps is not None and drawdown_bps > gates.max_drawdown_bps:
         reasons.append(
-            f"max_drawdown {drawdown_bps.quantize(Decimal('1'))}bps > "
-            f"{gates.max_drawdown_bps}bps"
+            f"max_drawdown {drawdown_bps.quantize(Decimal('1'))}bps > {gates.max_drawdown_bps}bps"
         )
     if gates.min_trades is not None and len(result.fills) < gates.min_trades:
         reasons.append(f"fills {len(result.fills)} < min_trades {gates.min_trades}")
     equity_base = result.final_equity + result.cost_paid
     cost_bps = (result.cost_paid / equity_base * _BPS) if equity_base > 0 else Decimal("0")
     if gates.cost_bps_max is not None and cost_bps > gates.cost_bps_max:
-        reasons.append(
-            f"cost {cost_bps.quantize(Decimal('1'))}bps > {gates.cost_bps_max}bps"
-        )
+        reasons.append(f"cost {cost_bps.quantize(Decimal('1'))}bps > {gates.cost_bps_max}bps")
     if (
         gates.decision_hit_rate_min is not None
         and hit_rate is not None
         and hit_rate < gates.decision_hit_rate_min
     ):
         reasons.append(
-            f"hit_rate {hit_rate.quantize(Decimal('0.001'))} < "
-            f"{gates.decision_hit_rate_min}"
+            f"hit_rate {hit_rate.quantize(Decimal('0.001'))} < {gates.decision_hit_rate_min}"
         )
 
     return FoldResult(
         fold_index=fold_index,
         start=sessions[0],
         end=sessions[-1],
+        initial_equity=initial_capital,
         final_equity=result.final_equity,
         total_return=total_return,
         max_drawdown=max_drawdown,
@@ -273,8 +269,8 @@ def evaluate_challenger(
     """Evaluate a challenger over in-sample series + out-of-sample folds.
 
     ``fold_size`` partitions every series into consecutive equal folds; when
-    omitted, each series is one fold.  Gate checks run per fold; promotion
-    requires every fold to pass and the challenger to be in ``paper`` status.
+    omitted, each series is one diagnostic fold. Passing gates never grants
+    promotion. Use workflow.run_experiment for chronological bounded evaluation.
     """
     gates = gates or LearningGates()
     if not isinstance(seed, int) or seed < 0 or seed >= 2**32:
@@ -282,10 +278,13 @@ def evaluate_challenger(
     series_list = [series, *folds]
     if len(series_list) < gates.fold_min and fold_size is None:
         raise LearningError(
-            f"need at least {gates.fold_min} folds; got {len(series_list)} (pass fold_size to partition)"
+            f"need at least {gates.fold_min} folds; got {len(series_list)} "
+            "(pass fold_size to partition)"
         )
     fee_rate, slippage_rate = _cost_rates(cost)
-    initial_capital = paper.initial_cash_usd if paper is not None else Decimal("10000")
+    initial_capital = (
+        paper.initial_cash_usd if paper is not None else PaperSettings().initial_cash_usd
+    )
 
     partitioned: list[CloseSeries] = []
     for source in series_list:
@@ -294,7 +293,9 @@ def evaluate_challenger(
             partitioned.append(source)
         else:
             for chunk in _fold_sessions(dates, fold_size):
-                partitioned.append(CloseSeries(source.instrument_id, *[(s, source.value_on(s)) for s in chunk if source.value_on(s) is not None]))
+                partitioned.append(
+                    CloseSeries([(s, v) for s in chunk if (v := source.value_on(s)) is not None])
+                )
 
     fold_results = [
         _evaluate_fold(
@@ -309,46 +310,19 @@ def evaluate_challenger(
         for index, fold in enumerate(partitioned)
     ]
     if len(fold_results) < gates.fold_min:
-        raise LearningError(
-            f"need at least {gates.fold_min} folds; got {len(fold_results)}"
-        )
+        raise LearningError(f"need at least {gates.fold_min} folds; got {len(fold_results)}")
 
     gate_reasons = tuple(
-        f"fold {fold.fold_index}: {reason}"
-        for fold in fold_results
-        for reason in fold.gate_reasons
+        f"fold {fold.fold_index}: {reason}" for fold in fold_results for reason in fold.gate_reasons
     )
     gates_passed = not gate_reasons
 
+    # Evaluation only supplies evidence; even a passing shadow candidate cannot
+    # create or replace a champion. Activation is outside this research module.
     champion: Champion | None = None
-    new_challenger: Challenger | None = None
-    if gates_passed and challenger.status is ChallengerStatus.SHADOW:
-        promoted_at = series_list[-1].dates()[-1]
-        new_challenger = challenger.transition(
-            ChallengerStatus.PROMOTED, actor="learning"
-        )
-        champion = Champion(
-            champion_id=f"champion-{challenger.challenger_id}",
-            strategy=challenger.strategy,
-            instrument=challenger.instrument,
-            status=ChallengerStatus.PROMOTED,
-            rule_digest=challenger.rule_digest,
-            promoted_at=promoted_at,
-            promoted_from=challenger.challenger_id,
-        )
-    elif gates_passed and challenger.status is not ChallengerStatus.PROMOTED:
-        # Already promoted or retired: no state change, but record the champion view.
-        champion = Champion(
-            champion_id=challenger.challenger_id,
-            strategy=challenger.strategy,
-            instrument=challenger.instrument,
-            status=challenger.status,
-            rule_digest=challenger.rule_digest,
-            promoted_at=series_list[0].dates()[0],
-            promoted_from="none",
-        )
+    new_challenger: Challenger | None = challenger
 
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     payload = {
         "challenger_id": challenger.challenger_id,
         "rule_digest": challenger.rule_digest,

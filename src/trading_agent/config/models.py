@@ -464,6 +464,7 @@ class LearningSettings(BaseModel):
     enabled: bool = True
     live_auto_promotion_enabled: bool = False
     max_challenger_trials_per_week: int = Field(default=20, ge=0)
+    research_store_dir: Path = Path(".data/learning")
     allowed_live_change_classes: list[str] = []
     require_matured_labels: bool = True
 

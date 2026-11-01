@@ -50,3 +50,11 @@ select, .filterbar select { background: var(--bg); color: var(--text);
                             padding: 4px 8px; }
 .filterbar { display: flex; gap: 10px; align-items: center; margin: 12px 0; }
 footer { color: var(--dim); font-size: 12px; text-align: center; padding: 20px; }
+
+/* Learning artifacts preserve exact amounts and long provenance hashes. */
+body[data-page="learning"] header { flex-wrap: wrap; }
+body[data-page="learning"] nav { flex-wrap: wrap; }
+body[data-page="learning"] code { overflow-wrap: anywhere; }
+body[data-page="learning"] .research-table { overflow-x: auto; margin: 12px 0; }
+body[data-page="learning"] a:focus-visible,
+body[data-page="learning"] .research-table:focus-visible { outline: 2px solid var(--accent); }

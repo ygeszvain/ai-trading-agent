@@ -39,3 +39,7 @@ webauth.json
 # Operating-system metadata
 .DS_Store
 Thumbs.db
+
+# Local synthetic browser acceptance artifacts
+/output/playwright/
+/.playwright-cli/

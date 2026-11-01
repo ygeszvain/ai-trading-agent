@@ -1,11 +1,10 @@
 """Tests for the challenger model: validation, digest, serialization."""
-from datetime import date
+
 from decimal import Decimal
 
 import pytest
 
-from trading_agent.learning import LearningError
-from trading_agent.learning import Challenger
+from trading_agent.learning import Challenger, LearningError
 
 
 def make_challenger(**overrides) -> Challenger:

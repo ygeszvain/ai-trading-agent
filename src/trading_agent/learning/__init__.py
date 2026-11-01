@@ -1,12 +1,11 @@
-"""Learning loop package (plan M4): prompts, dataset/labels, challenger/eval, memory.
+"""Research-only learning. New immutable workflow: records.py and workflow.py.
 
-Canonical API surface for the M4 learning loop; import from here, not from
-submodules.
+Legacy APIs remain for fixture compatibility; none may activate a strategy.
 """
 
 from .challenger import (
-    STRATEGY_TREND_MOMENTUM,
     ALLOWED_TRANSITIONS,
+    STRATEGY_TREND_MOMENTUM,
     Challenger,
     ChallengerError,
     ChallengerStatus,
@@ -32,6 +31,7 @@ from .labels import (
 )
 from .memory import Champion, ChampionMemory, Memory, MemoryBank
 from .paper import PaperLifecycle, PaperStatus
+from .records import DatasetSnapshot, RecordedDecision
 from .store import (
     LearningStore,
     LearningStoreError,
@@ -41,8 +41,15 @@ from .store import (
     load_json,
     load_jsonl,
 )
+from .workflow import FrozenChampion, ResearchProtocol, SearchSpace, run_experiment
 
 __all__ = [
+    "DatasetSnapshot",
+    "RecordedDecision",
+    "FrozenChampion",
+    "ResearchProtocol",
+    "SearchSpace",
+    "run_experiment",
     "STRATEGY_TREND_MOMENTUM",
     "ALLOWED_TRANSITIONS",
     "Challenger",

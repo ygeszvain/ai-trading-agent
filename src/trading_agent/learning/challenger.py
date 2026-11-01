@@ -1,37 +1,17 @@
-"""Challenger strategies: fixed, versioned, provenance-stamped candidates.
-
-A challenger is the unit that gets evaluated, promoted, and remembered.
-Per the owner's design (decision D6 in this layer), v1 challengers are
-*fixed deterministic rules* -- currently the owner's ``MomentumRule`` -- so
-that the champion cycle works end to end without a live model. The schema
-carries room for model-based challengers (``origin`` records research job,
-model, and prompt version) but v1 refuses to *promote* a challenger whose
-origin is a model: models propose, deterministic rules decide (the research
-layer already treats LLM output as advisory).
-
-Lifecycle (owner plan section 12):
-
-    proposed -> evaluating -> candidate -> shadow -> promoted
-               |                 |            |
-               +-> rejected <+<--+   rejected |  archived
-
-Every status change is recorded in ``status_history`` with the actor and
-the report digest that justified it, so the full trajectory of any
-challenger is auditable. The digest covers the rule *and* its provenance,
-so two challengers that "look the same" but were shaped by different data
-are different challengers.
-"""
+"""Legacy challenger contracts; research can evaluate or shadow, never promote."""
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import datetime, timezone
-from pathlib import Path
+from datetime import UTC, datetime
 from decimal import Decimal
-from typing import Any, Mapping, Sequence
+from pathlib import Path
+from typing import Any
 
 from ..backtest.engine import MomentumRule
-from .labels import _digest
+from .labels import LearningError, _digest
+
 
 class ChallengerStatus:
     """Challenger lifecycle states (immutable transition-enforced)."""
@@ -43,6 +23,7 @@ class ChallengerStatus:
     PROMOTED = "promoted"
     REJECTED = "rejected"
     ARCHIVED = "archived"
+
 
 ALL_STATUSES: tuple[str, ...] = (
     ChallengerStatus.PROPOSED,
@@ -61,11 +42,14 @@ ALLOWED_TRANSITIONS: dict[str, frozenset[str]] = {
         {ChallengerStatus.CANDIDATE, ChallengerStatus.REJECTED, ChallengerStatus.ARCHIVED}
     ),
     ChallengerStatus.CANDIDATE: frozenset(
-        {ChallengerStatus.SHADOW, ChallengerStatus.EVALUATING, ChallengerStatus.REJECTED, ChallengerStatus.ARCHIVED}
+        {
+            ChallengerStatus.SHADOW,
+            ChallengerStatus.EVALUATING,
+            ChallengerStatus.REJECTED,
+            ChallengerStatus.ARCHIVED,
+        }
     ),
-    ChallengerStatus.SHADOW: frozenset(
-        {ChallengerStatus.PROMOTED, ChallengerStatus.REJECTED, ChallengerStatus.ARCHIVED}
-    ),
+    ChallengerStatus.SHADOW: frozenset({ChallengerStatus.REJECTED, ChallengerStatus.ARCHIVED}),
     ChallengerStatus.PROMOTED: frozenset({ChallengerStatus.ARCHIVED, ChallengerStatus.SHADOW}),
     ChallengerStatus.REJECTED: frozenset({ChallengerStatus.ARCHIVED}),
     ChallengerStatus.ARCHIVED: frozenset(),
@@ -78,7 +62,7 @@ _LOOKBACK_RANGE = (5, 250)
 _WEIGHT_MAX = Decimal("1")
 
 
-class ChallengerError(Exception):
+class ChallengerError(LearningError):
     """Invalid challenger definition or disallowed lifecycle transition."""
 
 
@@ -146,15 +130,26 @@ class Challenger:
     @property
     def rule_digest(self) -> str:
         """Digest of the rule parameters (matches ``MomentumRule.digest``)."""
-        return self.rule.digest()
+        return _digest(
+            {
+                "lookback": self.lookback,
+                "entry": str(self.entry_momentum),
+                "exit": str(self.exit_momentum),
+                "weight": str(self.target_weight),
+            }
+        )
 
     @property
     def is_model_origin(self) -> bool:
         return self.origin.startswith("research:")
 
+    def digest(self) -> str:
+        return self.compute_digest()
+
     def compute_digest(self) -> str:
         return _digest(
             {
+                "instrument": self.instrument,
                 "name": self.name,
                 "strategy": self.strategy,
                 "lookback": self.lookback,
@@ -168,19 +163,24 @@ class Challenger:
             }
         )
 
-    def transition(self, new_status: str, *, actor: str, report_digest: str | None = None) -> "Challenger":
+    def transition(
+        self, new_status: str, *, actor: str, report_digest: str | None = None
+    ) -> Challenger:
         """Return a new challenger in ``new_status``; reject illegal edges."""
+        if new_status == ChallengerStatus.PROMOTED:
+            raise ChallengerError("research cannot activate or promote a strategy")
         if new_status not in ALL_STATUSES:
             raise ChallengerError(f"unknown status {new_status!r}")
         if new_status not in ALLOWED_TRANSITIONS[self.status]:
             raise ChallengerError(
-                f"challenger {self.challenger_id}: {self.status} -> {new_status} is not an allowed transition"
+                f"challenger {self.challenger_id}: {self.status} -> {new_status} "
+                "is not an allowed transition"
             )
         entry: dict[str, Any] = {
             "from": self.status,
             "to": new_status,
             "actor": actor,
-            "at": datetime.now(timezone.utc).isoformat(),
+            "at": datetime.now(UTC).isoformat(),
         }
         if report_digest is not None:
             entry["report_digest"] = report_digest
@@ -235,8 +235,12 @@ class Challenger:
             exit_momentum=Decimal(str(raw["exit_momentum"])),
             target_weight=Decimal(str(raw["target_weight"])),
             origin=str(raw["origin"]),
-            source_dataset_digest=None if raw.get("source_dataset_digest") is None else str(raw["source_dataset_digest"]),
-            protocol_digest=None if raw.get("protocol_digest") is None else str(raw["protocol_digest"]),
+            source_dataset_digest=None
+            if raw.get("source_dataset_digest") is None
+            else str(raw["source_dataset_digest"]),
+            protocol_digest=None
+            if raw.get("protocol_digest") is None
+            else str(raw["protocol_digest"]),
             created_at=str(raw["created_at"]),
             status=str(raw.get("status", ChallengerStatus.PROPOSED)),
             status_history=tuple(dict(item) for item in raw.get("status_history", [])),
@@ -245,7 +249,7 @@ class Challenger:
         )
 
 
-def load_challengers(store_dir) -> dict[str, Challenger]:
+def load_challengers(store_dir: str | Path) -> dict[str, Challenger]:
     """Load all challenger artifacts from the learning store."""
     from .store import load_json
 
@@ -260,7 +264,7 @@ def load_challengers(store_dir) -> dict[str, Challenger]:
     return challengers
 
 
-def save_challenger(challenger: Challenger, store_dir) -> Path:
+def save_challenger(challenger: Challenger, store_dir: str | Path) -> Path:
     """Persist a challenger artifact (full state; status history included)."""
     from .store import atomic_write_json
 

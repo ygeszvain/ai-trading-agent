@@ -18,14 +18,15 @@ it from the ledger produces a new artifact (new digest, new created stamp).
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
-from decimal import Decimal
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 from ..version import __version__ as CODE_VERSION
 from .labels import DecisionLabel, DecisionRecord, _digest, mature_labels
+
 
 @dataclass(frozen=True)
 class DatasetProvenance:
@@ -82,7 +83,10 @@ class LearningDataset:
                 f"dataset {self.dataset_id}: {len(self.records)} records vs "
                 f"{len(self.labels)} labels; a dataset is never partial"
             )
-        if not self.labels or any(label.decision_id != record.decision_id for record, label in zip(self.records, self.labels)):
+        if not self.labels or any(
+            label.decision_id != record.decision_id
+            for record, label in zip(self.records, self.labels, strict=True)
+        ):
             raise ValueError(f"dataset {self.dataset_id}: records and labels are misaligned")
         if not self.dataset_digest:
             object.__setattr__(self, "dataset_digest", self.compute_digest())
@@ -105,7 +109,7 @@ class LearningDataset:
     def training_records(self) -> tuple[tuple[DecisionRecord, DecisionLabel], ...]:
         """Decisions strictly before ``test_start`` (may inform behaviour)."""
         pairs = []
-        for record, label in zip(self.records, self.labels):
+        for record, label in zip(self.records, self.labels, strict=True):
             if record.decision_session < self.test_start:
                 pairs.append((record, label))
         return tuple(pairs)
@@ -113,7 +117,7 @@ class LearningDataset:
     def held_out_records(self) -> tuple[tuple[DecisionRecord, DecisionLabel], ...]:
         """Decisions at/after ``test_start`` -- evaluation only, never training."""
         pairs = []
-        for record, label in zip(self.records, self.labels):
+        for record, label in zip(self.records, self.labels, strict=True):
             if record.decision_session >= self.test_start:
                 pairs.append((record, label))
         return tuple(pairs)
@@ -122,7 +126,7 @@ class LearningDataset:
         """All pairs whose labels are fully matured (memory gate)."""
         return tuple(
             (record, label)
-            for record, label in zip(self.records, self.labels)
+            for record, label in zip(self.records, self.labels, strict=True)
             if label.is_fully_matured(self.horizons)
         )
 
@@ -159,7 +163,9 @@ class LearningDataset:
         """Persist the snapshot as an immutable JSON artifact."""
         from .store import atomic_write_json
 
-        return atomic_write_json(Path(store_dir).expanduser() / "datasets" / f"{self.dataset_id}.json", self.to_dict())
+        return atomic_write_json(
+            Path(store_dir).expanduser() / "datasets" / f"{self.dataset_id}.json", self.to_dict()
+        )
 
 
 def build_dataset(
@@ -169,6 +175,7 @@ def build_dataset(
     series_by_instrument: Mapping[str, Any],
     as_of: date,
     horizons: Sequence[int],
+    session_calendar: Sequence[date],
     test_start: date,
     provenance: DatasetProvenance,
     created_at: str | None = None,
@@ -179,11 +186,15 @@ def build_dataset(
     order-independent for a given content.
     """
     if not records:
-        raise ValueError("refusing to build an empty dataset (it would still be a learnable artifact)")
+        raise ValueError(
+            "refusing to build an empty dataset (it would still be a learnable artifact)"
+        )
     ordered = sorted(records, key=lambda r: (r.decision_session, r.decision_id))
-    labels = mature_labels(ordered, series_by_instrument, as_of, horizons)
+    labels = mature_labels(
+        ordered, series_by_instrument, as_of, horizons, session_calendar=session_calendar
+    )
     label_list = tuple(labels[record.decision_id] for record in ordered)
-    stamp = created_at or datetime.now(timezone.utc).isoformat()
+    stamp = created_at or datetime.now(UTC).isoformat()
     dataset = LearningDataset(
         dataset_id=dataset_id,
         records=tuple(ordered),

@@ -13,13 +13,15 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections.abc import Mapping
+from contextlib import suppress
 from pathlib import Path
-from typing import Any
+from typing import Any, cast
 
-from ..exceptions import TradingAgentError
+from .labels import LearningError
 
 
-class LearningStoreError(TradingAgentError):
+class LearningStoreError(LearningError):
     """A learning store artifact is missing, unreadable, or corrupt."""
 
 
@@ -41,10 +43,8 @@ def atomic_write_json(path: str | Path, payload: Any) -> Path:
             handle.write(payload_text)
         os.replace(tmp_name, target)
     except BaseException:
-        try:
+        with suppress(OSError):
             os.unlink(tmp_name)
-        except OSError:
-            pass
         raise
     return target
 
@@ -120,8 +120,8 @@ class LearningStore:
     def save_challenger(self, payload: Mapping[str, Any]) -> Path:
         return atomic_write_json(self.challenger_path(str(payload["challenger_id"])), dict(payload))
 
-    def load_challenger(self, challenger_id: str) -> dict[str, Any]:
-        return load_json(self.challenger_path(challenger_id))
+    def load_challenger(self, challenger_id: str) -> dict[str, Any] | None:
+        return cast("dict[str, Any] | None", load_json(self.challenger_path(challenger_id)))
 
     def list_challengers(self) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
@@ -138,8 +138,8 @@ class LearningStore:
             raise LearningStoreError(f"invalid evaluation id: {evaluation_id!r}")
         return atomic_write_json(self.evals_dir / f"{evaluation_id}.json", dict(payload))
 
-    def load_evaluation(self, evaluation_id: str) -> dict[str, Any]:
-        return load_json(self.evals_dir / f"{evaluation_id}.json")
+    def load_evaluation(self, evaluation_id: str) -> dict[str, Any] | None:
+        return cast("dict[str, Any] | None", load_json(self.evals_dir / f"{evaluation_id}.json"))
 
     # -- promotion audit -------------------------------------------------
     def record_promotion(self, entry: Mapping[str, Any]) -> None:
@@ -162,7 +162,7 @@ class LearningStore:
         return atomic_write_json(self.labels_dir / f"{record_digest}.json", dict(payload))
 
     def load_label(self, record_digest: str) -> dict[str, Any] | None:
-        return load_json(self.labels_dir / f"{record_digest}.json")
+        return cast("dict[str, Any] | None", load_json(self.labels_dir / f"{record_digest}.json"))
 
     def labels(self) -> list[dict[str, Any]]:
         entries: list[dict[str, Any]] = []
@@ -180,4 +180,4 @@ class LearningStore:
         return atomic_write_json(self.memory_path(), dict(payload))
 
     def load_memory(self) -> dict[str, Any] | None:
-        return load_json(self.memory_path())
+        return cast("dict[str, Any] | None", load_json(self.memory_path()))

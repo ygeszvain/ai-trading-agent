@@ -458,6 +458,14 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    learning_parser = subparsers.add_parser(
+        "learning", help="research-only learning artifacts (no activation)", parents=[config_parent]
+    )
+    learning_sub = learning_parser.add_subparsers(dest="learning_command", required=True)
+    demo_parser = learning_sub.add_parser("demo", help="deterministic synthetic learning demo")
+    demo_parser.add_argument("--out-dir", default=None, help="local research artifact directory")
+    demo_parser.set_defaults(func=_run_learning_demo)
+
     backtest_parser = subparsers.add_parser(
         "backtest", help="deterministic backtest", parents=[config_parent]
     )
@@ -550,6 +558,42 @@ def build_parser() -> argparse.ArgumentParser:
     )
     serve_parser.set_defaults(func=_run_serve)
     return parser
+
+
+def _run_learning_demo(args: argparse.Namespace) -> int:
+    from ..learning.demo import run_demo
+    from ..learning.workflow import load_report
+
+    config = load_config(_resolve_config_path(args.config), ConfigEnvironment())
+    if config.app.mode.value != "simulation" or not config.learning.enabled:
+        print(
+            "error: the synthetic learning demo requires simulation and learning.enabled",
+            file=sys.stderr,
+        )
+        return 2
+    if config.learning.max_challenger_trials_per_week < 4:
+        print("error: the fixed demo requires a trial allowance of at least four", file=sys.stderr)
+        return 2
+    root = Path(args.out_dir) if args.out_dir else config.learning.research_store_dir
+    path = run_demo(root)
+    report = load_report(root, path.stem)
+    counts = {
+        status: sum(v.status == status for v in report.dataset.outcomes)
+        for status in ("MATURED", "PENDING", "INCOMPLETE")
+    }
+    print("SIMULATION — research only; journal updates are not weight training")
+    print(f"outcomes: {counts}; trials: {len(report.trials)}; steps: {report.simulation_steps}")
+    print(
+        f"shadow steps: {report.shadow.simulation_steps if report.shadow else 0}; "
+        f"total budget: {report.plan.protocol.max_simulation_steps}"
+    )
+    print(f"champion unchanged: {report.frozen_champion.digest() == report.champion_after_hash}")
+    print(f"proposal: {report.proposal.status}; authorization: absent; activation: disabled")
+    print(f"shadow: synthetic demonstration, paused={bool(report.alerts)}")
+    print(f"artifact: {path}")
+    print(f"learning page: /learning?experiment_id={path.stem}")
+    print("authority: LIVE_NOT_AUTHORIZED")
+    return 0
 
 
 def _run_serve(args: argparse.Namespace) -> int:

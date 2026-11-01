@@ -11,13 +11,16 @@ scales each entry by the exponential schedule.
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterable, Mapping
+from copy import deepcopy
 from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
 from hashlib import sha256
-from typing import Any, Iterable, Mapping
+from typing import Any
 
-from .challenger import Challenger, ChallengerStatus
+from .challenger import Challenger
 from .labels import DecisionLabel, DecisionRecord, _digest
 
 
@@ -25,7 +28,9 @@ class MemoryError(ValueError):
     """Raised on invalid memory mutation attempts."""
 
 
-def entry_from_record(record: DecisionRecord, *, label: DecisionLabel | None = None) -> dict[str, Any]:
+def entry_from_record(
+    record: DecisionRecord, *, label: DecisionLabel | None = None
+) -> dict[str, Any]:
     entry: dict[str, Any] = {
         "decision_id": record.decision_id,
         "session": record.decision_session,
@@ -81,16 +86,9 @@ class Memory:
         merged = dict(entry)
         if existing is not None:
             if existing["matured"] and label_digests_differ(existing, merged):
-                merged.update(
-                    label_digest=existing["label_digest"],
-                    record_digest=existing["record_digest"],
-                    horizons=existing["horizons"],
-                    realized_return=existing["realized_return"],
-                    max_drawdown=existing["max_drawdown"],
-                    gapped=existing["gapped"],
-                    matured=existing["matured"],
-                    matured_as_of=existing["matured_as_of"],
-                )
+                # Preserve each previous observation, including corrections; no
+                # strategy reads this journal as configuration or prompt input.
+                merged["corrections"] = (*existing.get("corrections", ()), deepcopy(existing))
             merged["decay"] = existing["decay"]
         self._by_decision[decision_id] = merged
 
@@ -99,20 +97,24 @@ class Memory:
         self._upsert_raw(entry)
 
     def upsert_label(self, label: DecisionLabel) -> None:
-        entry = entry_from_label(label)
+        existing = self._by_decision.get(label.decision_id, {})
+        entry = {**existing, **entry_from_label(label)}
+        for key in ("record_digest", "model_id", "prompt_version"):
+            if existing.get(key) is not None:
+                entry[key] = existing[key]
         self._upsert_raw(entry)
 
     def get(self, decision_id: str) -> dict[str, Any] | None:
-        return self._by_decision.get(decision_id)
+        return deepcopy(self._by_decision.get(decision_id))
 
     def __len__(self) -> int:
         return len(self._by_decision)
 
-    def decay(self, *, half_life: Decimal) -> None:
+    def decay(self, *, half_life: Decimal, as_of: date | None = None) -> None:
         if half_life <= 0:
             raise MemoryError("half_life must be positive")
         for entry in self._by_decision.values():
-            age = entry["last_seen"] - entry["session"]
+            age = ((as_of or entry["last_seen"]) - entry["session"]).days
             if age > 0:
                 factor = Decimal(0.5) ** (age / half_life)
                 entry["decay"] = entry["decay"] * factor
@@ -130,7 +132,7 @@ class Memory:
 
     def digest(self) -> str:
         return sha256(
-            ("memory\x1f" + self.memory_id + "\x1f" + "|".join(sorted(self._by_decision))).encode("utf-8")
+            json.dumps(self.to_dict(), sort_keys=True, default=str).encode("utf-8")
         ).hexdigest()
 
 
@@ -180,7 +182,7 @@ class Champion:
     champion_id: str
     strategy: str
     instrument: str
-    status: ChallengerStatus
+    status: str
     rule_digest: str
     promoted_at: date
     promoted_from: str
@@ -196,7 +198,9 @@ class Champion:
             retired_at=at,
             retired_reason=reason,
             digest=sha256(
-                (self.champion_id, "retired", at.isoformat(), reason, self.rule_digest).encode()
+                "|".join(
+                    (self.champion_id, "retired", at.isoformat(), reason, self.rule_digest)
+                ).encode()
             ).hexdigest(),
         )
 
@@ -220,7 +224,7 @@ class Champion:
             champion_id=str(raw["champion_id"]),
             strategy=str(raw["strategy"]),
             instrument=str(raw["instrument"]),
-            status=ChallengerStatus(raw["status"]),
+            status=str(raw["status"]),
             rule_digest=str(raw["rule_digest"]),
             promoted_at=date.fromisoformat(str(raw["promoted_at"])),
             promoted_from=str(raw["promoted_from"]),
@@ -246,19 +250,10 @@ class ChampionMemory:
         self._blocks: dict[str, Memory] = dict(blocks or {})
 
     def block_for(self, instrument: str) -> Memory:
-        key = champion_memory_id(self._pseudo_challenger(), instrument=instrument)
+        key = f"champion:{self.champion.strategy}:{instrument}:{self.champion.rule_digest[:16]}"
         if key not in self._blocks:
             self._blocks[key] = Memory(key)
         return self._blocks[key]
-
-    def _pseudo_challenger(self) -> Challenger:
-        return Challenger(
-            challenger_id=self.champion.champion_id,
-            strategy=self.champion.strategy,
-            rule_digest=self.champion.rule_digest,
-            status=self.champion.status,
-            instrument=self.champion.instrument,
-        )
 
     def upsert_label(self, instrument: str, label: DecisionLabel) -> None:
         self.block_for(instrument).upsert_label(label)
@@ -299,7 +294,7 @@ class MemoryBank:
             self.add(bank)
 
     def add(self, bank: ChampionMemory) -> None:
-        key = (bank.champion.challenger_id, bank.champion.strategy, bank.champion.instrument)
+        key = (bank.champion.champion_id, bank.champion.strategy, bank.champion.instrument)
         if key in self._by_key:
             raise MemoryError(f"duplicate memory bank for {key}")
         self._by_key[key] = bank
@@ -327,14 +322,12 @@ class MemoryBank:
 
     @classmethod
     def from_dict(cls, raw: Mapping[str, Any]) -> MemoryBank:
-        banks = [
-            ChampionMemory.from_dict(entry["bank"]) for entry in raw.get("banks", [])
-        ]
+        banks = [ChampionMemory.from_dict(entry["bank"]) for entry in raw.get("banks", [])]
         return cls(banks)
 
     def digest(self) -> str:
         return sha256(
-            repr([(key, bank.digest()) for key, bank in sorted(self._by_key.items())]).encode()
+            repr([(key, bank.digest) for key, bank in sorted(self._by_key.items())]).encode()
         ).hexdigest()
 
 

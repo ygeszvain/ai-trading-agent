@@ -73,6 +73,21 @@ exist, but verify their effect in the resulting report; the current backtest
 implementation has unresolved argument/application inconsistencies. Use the
 checked-in default range for the reproducible smoke check.
 
+The independent research learning demonstration is also offline:
+
+```bash
+uv run trading-agent learning demo
+```
+
+It writes immutable artifacts under `.data/learning/`, prints outcome counts,
+records all four challenger trials, and prepares a blocked promotion proposal.
+It cannot activate a champion. The printed `/learning?experiment_id=<hash>` link
+opens the authenticated research page after website startup below. See
+[research_learning.md](docs/research_learning.md) for contracts, budgets,
+corrections, prospective-harness limits, and current checks. The initial
+publication's failing learning fixtures have been repaired; three separate M3
+economic-evaluation failures remain.
+
 ## 4. Optional local PostgreSQL and website
 
 The file-based CLI demo needs no database. The persisted simulator and website

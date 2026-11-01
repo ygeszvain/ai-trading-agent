@@ -16,8 +16,8 @@ Rules enforced in this module:
 from __future__ import annotations
 
 import hmac
-from collections.abc import Awaitable, Callable, Iterator
 import sys
+from collections.abc import Awaitable, Callable, Iterator
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -30,10 +30,10 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from starlette.responses import Response
 
-from ..config.models import TradingConfig, TradingMode
-from ..security.loopback import is_loopback_url
+from ..config.models import TradingConfig
 from ..db.engine import create_app_engine, open_session
 from ..db.migrate import run_migrations
+from ..security.loopback import is_loopback_url
 from . import auth as auth_module
 from .auth import SESSION_COOKIE, AuthStore, expected_origin, host_matches
 from .queries import (
@@ -57,7 +57,7 @@ def _base_context(config: TradingConfig) -> dict[str, str]:
         "mode": config.app.mode.value.upper(),
         "authority": config.authority(),
         "web_url": f"http://{config.app.web_host}:{config.app.web_port}",
-        "label": "SIMULATION" if config.app.mode is TradingMode.SIMULATION else "LIVE",
+        "label": config.app.mode.value.upper(),
     }
 
 
@@ -193,6 +193,49 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
     async def page_instrument_detail(request: Request, instrument_id: str) -> Response:
         return templates.TemplateResponse(
             request, "instrument_detail.html", {**base_ctx, "instrument_id": instrument_id}
+        )
+
+    @app.get("/learning", response_class=HTMLResponse)
+    async def page_learning(request: Request, experiment_id: str | None = None) -> Response:
+        from ..learning.labels import LearningError
+        from ..learning.workflow import load_report
+
+        require_auth(request)
+        report = None
+        error = None
+        if experiment_id is not None:
+            try:
+                report = load_report(config.learning.research_store_dir, experiment_id)
+            except (LearningError, OSError, ValueError):
+                raise HTTPException(
+                    status_code=404, detail="research artifact unavailable"
+                ) from None
+            scope = report.dataset.scope
+            if (
+                scope.mode != config.app.mode.value
+                or scope.mode != "simulation"
+                or scope.account_alias != "research-fixture"
+            ):
+                raise HTTPException(
+                    status_code=404, detail="research artifact outside active scope"
+                )
+        else:
+            error = (
+                "No experiment selected. Run trading-agent learning demo "
+                "and open its learning-page link."
+            )
+        return templates.TemplateResponse(
+            request=request,
+            name="learning.html",
+            context={
+                **base_ctx,
+                "report": report,
+                "error": error,
+                "experiment_id": experiment_id,
+                "actions": {r.decision_id: r.intent.action for r in report.dataset.records}
+                if report
+                else {},
+            },
         )
 
     # --------------------------------------------------------------- api

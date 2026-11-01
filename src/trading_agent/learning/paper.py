@@ -1,34 +1,29 @@
-"""Paper-trading lifecycle and synthetic paper fills for challengers (plan M4).
-
-A challenger earns ``promote`` only after paper-trading.  The state machine
-is deterministic and fail-closed, and every transition is recorded with an
-auditable reason.  Paper fills are computed against the same ``CloseSeries``
-the evaluation uses, so the paper book, the backtest, and the replay all
-read one price source.
-"""
+"""Legacy synthetic paper replay. No evidence in this module authorizes activation."""
 
 from __future__ import annotations
 
 import hashlib
 import json
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import date
 from decimal import Decimal
-from enum import Enum
-from typing import Any, Iterable, Mapping
+from enum import StrEnum
+from typing import Any
 
 from ..backtest.engine import CloseSeries
 from .challenger import Challenger, ChallengerError
+from .labels import LearningError
 
 
-class PaperStatus(str, Enum):
+class PaperStatus(StrEnum):
     PAPER = "paper"
     PROMOTED = "promoted"
     RETIRED = "retired"
     FAILED = "failed"
 
 
-class PaperError(ValueError):
+class PaperError(LearningError):
     """Raised on illegal lifecycle transitions or malformed fills."""
 
 
@@ -48,6 +43,7 @@ class PaperTrade:
     direction: int
     units: Decimal
     realized_return_bps: Decimal
+    result_kind: str = "modeled_counterfactual"
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -91,6 +87,18 @@ class PaperLifecycle:
     history: tuple[dict[str, str], ...] = ()
     digest: str = ""
 
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "paper_id": self.paper_id,
+            "challenger_id": self.challenger_id,
+            "status": self.status.value,
+            "opened_at": self.opened_at.isoformat(),
+            "minimum_trades": self.minimum_trades,
+            "rule_digest": self.rule_digest,
+            "trades": [trade.to_dict() for trade in self.trades],
+            "result_kind": "modeled_counterfactual",
+        }
+
     def open(self, *, at: date, note: str) -> PaperLifecycle:
         return replace(
             self,
@@ -102,9 +110,7 @@ class PaperLifecycle:
 
     def record(self, trade: PaperTrade) -> PaperLifecycle:
         if self.status is not PaperStatus.PAPER:
-            raise PaperError(
-                f"paper book {self.paper_id} is {self.status.value}; no more fills"
-            )
+            raise PaperError(f"paper book {self.paper_id} is {self.status.value}; no more fills")
         trades = self.trades + (trade,)
         realized = self.realized_total_bps + trade.realized_return_bps
         drawdown = max(self.max_drawdown_bps, -trade.realized_return_bps)
@@ -117,22 +123,7 @@ class PaperLifecycle:
         )
 
     def promote(self, *, at: date, reason: str) -> PaperLifecycle:
-        if self.status is not PaperStatus.PAPER:
-            raise PaperError(f"cannot promote a {self.status.value} paper book")
-        if len(self.trades) < self.minimum_trades:
-            raise PaperError(
-                f"paper book needs {self.minimum_trades} trades; has {len(self.trades)}"
-            )
-        return replace(
-            self,
-            status=PaperStatus.PROMOTED,
-            last_update=at,
-            history=self.history
-            + ({"at": at.isoformat(), "status": "promoted", "note": reason},),
-            digest=paper_digest(
-                (self.paper_id, self.challenger_id, "promoted", at.isoformat(), reason, self.rule_digest)
-            ),
-        )
+        raise PaperError("research paper evidence cannot activate or promote a strategy")
 
     def retire(self, *, at: date, reason: str) -> PaperLifecycle:
         if self.status is PaperStatus.RETIRED:
@@ -143,7 +134,14 @@ class PaperLifecycle:
             last_update=at,
             history=self.history + ({"at": at.isoformat(), "status": "retired", "note": reason},),
             digest=paper_digest(
-                (self.paper_id, self.challenger_id, "retired", at.isoformat(), reason, self.rule_digest)
+                (
+                    self.paper_id,
+                    self.challenger_id,
+                    "retired",
+                    at.isoformat(),
+                    reason,
+                    self.rule_digest,
+                )
             ),
         )
 
@@ -199,6 +197,7 @@ def simulate_paper(
         score = (current - base) / base
         should_hold = score >= (rule.exit_momentum if in_position else rule.entry_momentum)
         if in_position and not should_hold:
+            assert entry_price is not None and entry_session is not None
             units = initial_units * rule.target_weight
             cost_basis = units * entry_price * (Decimal("1") + fee_bps / Decimal("10000"))
             proceeds = units * current
@@ -230,7 +229,9 @@ def simulate_paper(
             entry_price = current
     if in_position and entry_session is not None and entry_price is not None:
         trade_index += 1
-        current = closes.value_on(session)
+        final_mark = closes.value_on(session)
+        assert final_mark is not None
+        current = final_mark
         units = initial_units * rule.target_weight
         cost_basis = units * entry_price * (Decimal("1") + fee_bps / Decimal("10000"))
         proceeds = units * current

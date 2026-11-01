@@ -1,9 +1,84 @@
 # Trading agent build status
 
-**Last updated:** 2026-11-01 (publication addendum; M0 evidence retained)
+**Last updated:** 2026-11-01 (Prompt 9 research-only implementation; historical evidence retained)
 **Current financial authority:** LIVE_NOT_AUTHORIZED
 **Approved live capital:** 0 USD (requested USD 1,000 pilot: recorded, activation pending — plan section 24)
-**Next task:** Prompt 2 — first offline trading slice and local website (M1)
+**Next numbered task:** Prompt 10 — security/failure readiness review; earlier acceptance gaps remain
+
+## Prompt 9 — Controlled research learning (M8 research only)
+
+The owner explicitly selected Prompt 9. Its independent offline scope is
+implemented on `codex/research-learning`; this is not acceptance of earlier
+M1–M5 milestones or a live strategy. See [research_learning.md](research_learning.md).
+
+### What works and acceptance
+
+- Frozen decision/evidence/portfolio/intent/fill/cost/version snapshots, explicit
+  session horizons and observation cutoffs, 64 mature / 4 pending / 1 incomplete
+  outcomes in the deterministic demo, linked corrections, preserved predecessors.
+- Four prespecified challengers, unchanged objective and holdout, causal
+  next-session modeled execution, cost/turnover/drawdown/safety comparisons and
+  3x cost stress. All four fixture candidates have inadequate evidence and remain
+  unqualified. Fold dispersion is disclosed without a confidence claim.
+- Immutable champion and isolated trial configurations; verified operational
+  notes have no path into prompts, model weights, strategy settings, or policy.
+- Write-once, content-addressed plan/dataset/champion/trial/incident/report files.
+  Started, failed, budget-exhausted and completed attempts are auditable.
+- Synthetic forward harness with registration/cursor checks, 45 reserved forward
+  steps in addition to 1,200 historical steps, missing-data/drawdown/feature-drift
+  pauses, and no replacement. Real prospective observations remain PENDING.
+- Versioned blocked proposal with exact diff, all trial references, prerequisites,
+  absent authorization, rollback target, and an always-rejecting activation API.
+  Legacy evaluation/challenger/paper entry points also cannot promote.
+- Authenticated read-only Learning page with fixture account/mode/run scope,
+  exact values, all failures, correction linkage, and explicit mechanism labels.
+
+### Exact commands and actual results
+
+| Command | Actual result |
+| --- | --- |
+| `uv run trading-agent learning demo` | Exit 0; 69 outcomes (64 MATURED / 4 PENDING / 1 INCOMPLETE), four trials, unchanged champion, BLOCKED_RESEARCH_PROPOSAL, synthetic shadow paused |
+| `uv run pytest -q tests/learning tests/test_learning*.py` | **45 passed**, one existing Starlette/httpx deprecation warning |
+| `uv run ruff check src/trading_agent/cli/main.py src/trading_agent/web/app.py src/trading_agent/config/models.py src/trading_agent/learning tests/test_learning*.py tests/learning` | All checks passed |
+| `uv run ruff format --check src/trading_agent/cli/main.py src/trading_agent/web/app.py src/trading_agent/learning tests/test_learning*.py tests/learning` | 20 files already formatted |
+| `uv run mypy --follow-imports=silent -p trading_agent.learning` | Success, 11 learning source files; imported dependencies excluded from this scoped type result |
+| `uv run pytest -q` | **127 passed, 3 failed**, one warning; 5.89 seconds. The three existing `tests/evaluation/test_econ_eval.py` regime/whipsaw/fold-edge failures remain unchanged |
+| `uv run mypy` | **141 errors in 26 files**, 95 checked; pre-existing broader integration/type debt remains |
+| `uv run ruff check src tests --output-format json` | **85 broader findings** remain; scoped learning/integration files pass |
+
+A clean copy of all tracked/unignored source files (excluding Git history,
+virtual environments, local state and browser artifacts) also passed
+`uv sync --locked`, `uv run trading-agent learning demo`, and the 45-test focused
+suite. Its generated experiment hash matched the working checkout exactly:
+`9464a3e351f28646eb5be20f29ed00027285fc798c9e8397088ef874d2b89c27`.
+The source-copy test used a separate virtual environment; no PostgreSQL, model,
+or broker service was used by that focused workflow.
+
+Browser: Playwright CLI synthetic preview (database engine stubbed, fixture
+session only) verified login redirect, authenticated research rendering, mechanism
+and failure labels, Desktop 1440×1000 and narrow 390×844 layouts. Requests were
+loopback page/CSS/JavaScript only; the sole console error was an unrelated missing
+favicon. Screenshot paths: `output/playwright/learning-desktop.png` and
+`output/playwright/learning-narrow.png`. API tests prove page reads write no
+artifacts and construct no model/broker clients. Full PostgreSQL website startup
+and unrelated pages were not revalidated by this preview.
+
+### Changed files and limitations
+
+New: `learning/{records,workflow,demo}.py`,
+`tests/learning/test_research_workflow.py`, the Learning template and this
+research guide. Updated: legacy learning contracts/labels/dataset/evaluation/
+memory/paper/store APIs and fixture tests; CLI, one research-store configuration
+field, authenticated route/navigation/scoped styles, `.gitignore`, README,
+SETUP, AGENTS, and this ledger. No migration, risk-policy, live-default,
+M3 objective/holdout, or failing M3 evaluation test was changed.
+
+Integration/operations: no financial-account connection, real provider,
+LM Studio inference, real prospective sessions, broker mutation, or production
+operation. Owner-run integration and prior M1–M5 acceptance are still unresolved.
+Investment: no prospective economic evidence; profitability remains unproven.
+The next numbered prompt is **Prompt 10**, subject to explicit selection and
+these dependencies. Do not auto-advance or activate any proposal.
 
 ## Open source publication — November 1, 2026
 
@@ -150,22 +225,19 @@ None of these block Prompt 2's offline work.
 | 6 | Strategy and economic evaluation (M3) | Pending |
 | 7 | Official Robinhood gateway with writes disabled (M4) | Pending |
 | 8 | Full local trading website, monitoring, and forward paper mode (M5) | Pending |
-| 9 | Controlled learning in research | Pending |
+| 9 | Controlled learning in research | **Offline research scope implemented 2026-11-01**; evidence above, real prospective integration pending |
 | 10 | Security and failure-readiness review | Pending |
 | 11 | Supervised-live readiness; activation disabled (M6) | Pending |
 | 12 | Bounded-autonomy readiness; activation disabled (M7/M8) | Pending |
 
 ## Next action
 
-Read AGENTS.md, this file, the build plan, and `docs/Trading_Agent_Codex_Prompts.txt`
-(Prompt 2). Implement M1: the first offline vertical slice — strict
-configuration is done in M0; M1 adds typed data/decision/policy/order/fill/
-ledger contracts, synthetic market fixtures, one deterministic strategy plus
-HOLD, cash/passive baselines, the risk engine with reservations, the
-simulated order lifecycle, the first website pages (Overview, Activity,
-Orders/fills, Portfolio/instrument per `docs/website.md`), PostgreSQL
-migrations, the documented offline demo, and the restart/idempotency
-guarantees. Do not widen risk limits or change evaluation objectives to make
-tests pass. Stop at M1 and report honestly.
+The explicitly selected Prompt 9 research work is ready for review. The next
+numbered task is Prompt 10's security and failure-readiness review, only when
+requested. Reconcile earlier M1–M5 acceptance and the three existing M3 economic
+failures before making readiness or investment claims. Do not treat this
+research demonstration as permission to connect accounts, promote, deploy, or
+trade. The historical Prompt 2 handoff remains an unresolved dependency rather
+than proof of completed upstream milestones.
 
 Current financial authority: **LIVE_NOT_AUTHORIZED**.

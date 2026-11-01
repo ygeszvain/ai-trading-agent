@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% set page = "learning" %}
+{% block content %}
+<h1>Learning — research only</h1>
+<p>Learning changes persisted outcome labels, incident records, and isolated experiment parameters.
+It does not train model weights, edit prompts or risk policy, or change the active champion.</p>
+<p><strong>Activation disabled · LIVE_NOT_AUTHORIZED</strong></p>
+{% if error %}<p role="status">{{ error }}</p>{% endif %}
+{% if report %}
+<p>Account: {{ report.dataset.scope.account_alias }} · Mode: {{ report.dataset.scope.mode | upper }} ·
+Run: {{ report.dataset.scope.run_id }} · As of: {{ report.dataset.as_of.isoformat() }} · Source: {{ report.plan.source_kind }}.</p>
+<p>Experiment: <code>{{ experiment_id }}</code><br>Dataset: <code>{{ report.dataset.digest() }}</code><br>
+Protocol: <code>{{ report.plan.protocol.digest() }}</code></p>
+<h2>Frozen champion and promotion proposal</h2>
+<p>Champion unchanged: {{ report.frozen_champion.digest() == report.champion_after_hash }}.
+Rollback target: <code>{{ report.proposal.rollback_target }}</code>.</p>
+<p>Status: {{ report.proposal.status }}. Authorization absent. Permitted change class: {{ report.proposal.change_class }}.</p>
+<ul>{% for reason in report.proposal.prerequisites %}<li>{{ reason }}</li>{% endfor %}</ul>
+<h2>Outcomes and corrections</h2>
+<p>Horizon counts are declared exchange sessions. Missing observations stay incomplete.
+Price marks and counterfactuals are separate from reconciled realized P&amp;L; amounts below are exact backend decimal strings.</p>
+<div class="research-table" tabindex="0" role="region" aria-label="Research records"><table><thead><tr><th>Decision / action</th><th>Horizon</th><th>Status / kind</th><th>Market return</th><th>Realized P&amp;L</th><th>Fees</th><th>Correction</th></tr></thead>
+<tbody>{% for outcome in report.dataset.outcomes %}<tr><td>{{ outcome.decision_id }} / {{ actions.get(outcome.decision_id) }}</td>
+<td>{{ outcome.horizon_sessions }}</td><td>{{ outcome.status }} / {{ outcome.kind }}</td>
+<td>{{ outcome.market_return if outcome.market_return is not none else 'unavailable' }}</td>
+<td>{{ outcome.reconciled_realized_pnl if outcome.reconciled_realized_pnl is not none else 'unavailable' }}</td>
+<td>{{ outcome.explicit_fees }}</td><td>{{ outcome.supersedes or 'original' }}</td></tr>{% endfor %}</tbody></table></div>
+<h2>All challenger trials, including failures</h2>
+<p>Reserved simulation steps: {{ report.simulation_steps }} / {{ report.plan.protocol.max_simulation_steps }}.
+Unattempted grid points: {{ report.unattempted_parameters }}. Final holdout begins {{ report.plan.holdout_start }} and is excluded from selection.</p>
+<p>Edge ranges report observed fold dispersion; they are not calibrated confidence intervals. These synthetic results do not establish profitability.</p>
+{% for trial in report.trials %}
+<h3>{{ trial.trial_id[:12] }} — {{ trial.status }}</h3>
+<p>{{ trial.parameters }} · Net edge: {{ trial.mean_edge if trial.mean_edge is not none else 'unavailable' }} ·
+Fold edge range: {{ trial.edge_range }} · Qualified for shadow: {{ trial.qualified_for_shadow }}</p>
+<ul>{% for reason in trial.reasons %}<li>{{ reason }}</li>{% endfor %}</ul>
+<div class="research-table" tabindex="0" role="region" aria-label="Research records"><table><thead><tr><th>Test window</th><th>Cost</th><th>Turnover</th><th>Drawdown</th><th>Safety</th></tr></thead><tbody>
+{% for fold in trial.folds %}<tr><td>{{ fold.test_start }} — {{ fold.test_end }}</td><td>{{ fold.candidate.cost }}</td>
+<td>{{ fold.candidate.turnover }}</td><td>{{ fold.candidate.drawdown }}</td><td>{{ fold.candidate.safe }}</td></tr>{% endfor %}</tbody></table></div>
+{% endfor %}
+<h2>Prospective harness and operational memory</h2>
+<p>Shadow observations: {{ report.shadow.sessions | length if report.shadow else 0 }}.
+Source: {{ report.shadow.source_kind if report.shadow else 'not started' }}.
+Synthetic forward events are a harness demonstration, not elapsed prospective market evidence.</p>
+<ul>{% for alert in report.alerts %}<li>{{ alert.rule }}: {{ alert.trigger }} — {{ alert.action }}; replacement: none</li>{% endfor %}</ul>
+<ul>{% for incident in report.operational_memory %}<li>{{ incident.category }} · verified {{ incident.verified_at }} · {{ incident.note }}</li>{% endfor %}</ul>
+{% endif %}
+{% endblock %}
