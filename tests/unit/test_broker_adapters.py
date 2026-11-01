@@ -42,14 +42,18 @@ def test_factory_providers_registered() -> None:
 
 
 def test_simulator_reports_local_but_not_executable() -> None:
+    # Unbound (no run context): the venue is local code, not a connection to
+    # anything; it must advertise that it holds no state and offers no
+    # execution, and must never claim to be connected to a broker.
     config = load_config(path=None, env={})
     adapter = build_broker_adapter(config)
     capabilities = adapter.capabilities()
     assert capabilities.provider == "simulator"
-    assert capabilities.connected is True
+    assert capabilities.connected is False
     assert capabilities.reads_enabled is False
     assert capabilities.execution_enabled is False
     assert capabilities.verified_capability_digest is None
+    assert any("not bound" in note for note in capabilities.notes)
 
 
 def test_simulator_rejects_submission_without_executing() -> None:
@@ -58,8 +62,8 @@ def test_simulator_rejects_submission_without_executing() -> None:
     with pytest.raises(BrokerExecutionNotAvailable) as exc:
         adapter.submit_order(_request())
     message = str(exc.value)
+    assert "no run context bound" in message
     assert "not executed" in message
-    assert "M1" in message
 
 
 def test_simulator_rejects_cancellation() -> None:

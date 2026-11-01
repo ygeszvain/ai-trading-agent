@@ -10,6 +10,10 @@ In M0 it can never authorize: the broker gateway is not connected, no
 strategy is active, and no reconciliation state exists. Every unmet
 prerequisite is reported explicitly so the owner sees exactly what is
 missing, and the resulting authority is always LIVE_NOT_AUTHORIZED in M0.
+
+From M1 on, callers may supply a ``RuntimeStatus`` built from the run's
+persisted state; the reconciliation and strategy checks then reflect that
+data instead of the fail-closed defaults.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime
 
 from ..config.models import TradingConfig, is_live_mode
+from ..contracts.orders import RuntimeStatus
 from ..execution.broker_interface import BrokerAdapter
 
 LIVE_AUTHORITY = "LIVE_AUTHORIZED"
@@ -54,14 +59,55 @@ def evaluate_live_activation(
     broker: BrokerAdapter,
     *,
     now: datetime | None = None,
+    runtime: RuntimeStatus | None = None,
 ) -> ActivationDecision:
-    """Evaluate every activation prerequisite; fails closed on any gap."""
+    """Evaluate every activation prerequisite; fails closed on any gap.
+
+    ``runtime`` (from M1) carries the persisted runtime prerequisites: the
+    last reconciliation status and the active strategy versions, built from
+    the run's database state. When it is not supplied, those two checks stay
+    unmet with the M0 fail-closed defaults; the gate never guesses at state
+    it has not been given.
+    """
     timestamp = now if now is not None else datetime.now(UTC)
     capabilities = broker.capabilities()
     live_mode = is_live_mode(config.app.mode)
 
     authorization = config.live.authorization_expires_at
     authorization_unexpired = authorization is not None and authorization > timestamp
+
+    if runtime is None:
+        reconciliation_check = ActivationCheck(
+            "reconciliation_healthy",
+            False,
+            "no ledger or reconciliation service exists yet (M1)",
+        )
+        strategy_check = ActivationCheck(
+            "strategy_active",
+            False,
+            "no strategy is implemented or activated yet (M1)",
+        )
+    else:
+        reconciliation_check = ActivationCheck(
+            "reconciliation_healthy",
+            runtime.last_reconciliation_status == "consistent",
+            "last reconciliation "
+            + (
+                f"{runtime.last_reconciliation_status}"
+                if runtime.last_reconciliation_status is not None
+                else "has no data yet; unmet, never guessed"
+            ),
+        )
+        strategy_check = ActivationCheck(
+            "strategy_active",
+            bool(runtime.active_strategy_versions),
+            "active strategy versions: "
+            + (
+                ", ".join(runtime.active_strategy_versions)
+                if runtime.active_strategy_versions
+                else "none"
+            ),
+        )
 
     checks = (
         ActivationCheck(
@@ -149,16 +195,8 @@ def evaluate_live_activation(
                 else "unverified; authenticated capability discovery is required (M4)"
             ),
         ),
-        ActivationCheck(
-            "reconciliation_healthy",
-            False,
-            "no ledger or reconciliation service exists yet (M1)",
-        ),
-        ActivationCheck(
-            "strategy_active",
-            False,
-            "no strategy is implemented or activated yet (M1)",
-        ),
+        reconciliation_check,
+        strategy_check,
     )
 
     authorized = all(check.satisfied for check in checks)

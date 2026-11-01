@@ -9,6 +9,10 @@ dependencies = [
     "PyYAML>=6.0.2,<7",
     "fastapi>=0.115,<1",
     "uvicorn[standard]>=0.30,<1",
+    "sqlalchemy>=2.0,<3",
+    "alembic>=1.13,<2",
+    "psycopg[binary]>=3.1,<4",
+    "jinja2>=3.1,<4",
 ]
 
 [project.scripts]
@@ -21,6 +25,8 @@ dev = [
     "mypy>=1.11,<2",
     "types-PyYAML>=6.0.2",
     "hypothesis>=6.100,<10",
+    "playwright>=1.45,<2",
+    "httpx>=0.28.1",
 ]
 
 [build-system]
@@ -33,6 +39,8 @@ packages = ["src/trading_agent"]
 [tool.ruff]
 line-length = 100
 target-version = "py313"
+# Alembic autogenerate output is machine-written; keep it out of lint/format.
+extend-exclude = ["migrations/versions"]
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "UP", "B", "SIM"]

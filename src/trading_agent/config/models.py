@@ -12,10 +12,12 @@ Design rules:
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
+import os
 from decimal import Decimal
 from enum import StrEnum
 from typing import Any, Literal
+from urllib.parse import urlparse
 
 from pydantic import (
     BaseModel,
@@ -28,6 +30,7 @@ from pydantic import (
 )
 
 from ..money import parse_fraction, parse_money
+from ..security.loopback import is_loopback_url as _is_loopback_url
 
 LOOPBACK_HOSTS = frozenset({"127.0.0.1", "localhost", "::1"})
 SYNTHETIC_PREFIX = "TEST_"
@@ -47,6 +50,20 @@ def is_live_mode(mode: TradingMode) -> bool:
     return mode in (TradingMode.SUPERVISED_LIVE, TradingMode.BOUNDED_AUTONOMOUS_LIVE)
 
 
+class SourceId(StrEnum):
+    """M3 data-source registry identifiers (plan section 8: registry-driven)."""
+
+    SYNTHETIC = "synthetic"
+    FRED = "fred"
+    ALPHAVANTAGE = "alpha_vantage"
+    COINGECKO = "coingecko"
+    COINDESK = "coindesk"
+    YAHOO = "yahoo"
+    COINBASE = "coinbase"
+
+
+
+
 def _decimal(value: Any, *, field: str, allow_negative: bool = False) -> Decimal:
     try:
         return parse_money(value, field=field, allow_negative=allow_negative)
@@ -61,23 +78,6 @@ def _fraction(value: Any, *, field: str) -> Decimal:
         raise ValueError(str(exc)) from None
 
 
-def _is_loopback_url(url: str) -> bool:
-    lowered = url.strip().lower()
-    for prefix in (
-        "http://127.0.0.1",
-        "https://127.0.0.1",
-        "http://localhost",
-        "https://localhost",
-        "http://[::1]",
-        "https://[::1]",
-        "http://::1",
-        "https://::1",
-    ):
-        if lowered.startswith(prefix):
-            return True
-    return False
-
-
 class AppSettings(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -87,6 +87,7 @@ class AppSettings(BaseModel):
     exchange_timezone: str = "America/New_York"
     web_host: str = "127.0.0.1"
     web_port: int = Field(default=8000, ge=1024, le=65535)
+    db_url: str = "postgresql+psycopg://trading_agent@127.0.0.1:5433/trading_agent"
 
     @field_validator("web_host")
     @classmethod
@@ -97,6 +98,19 @@ class AppSettings(BaseModel):
                 "127.0.0.1/localhost (plan section 18)"
             )
         return value.strip()
+
+    @field_validator("db_url")
+    @classmethod
+    def _validate_db_url(cls, value: str) -> str:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(value)
+        host = parsed.hostname or ""
+        if host.lower() not in LOOPBACK_HOSTS:
+            raise ValueError(
+                f"app.db_url: host {host!r} is not loopback; the application database must be local"
+            )
+        return value
 
     @field_validator("display_timezone", "exchange_timezone")
     @classmethod
@@ -154,6 +168,27 @@ class LLMSettings(BaseModel):
             "max_documents_per_job": self.max_documents_per_job,
             "job_timeout_seconds": self.job_timeout_seconds,
         }
+
+
+
+
+class ResearchSettings(BaseModel):
+    """M2 research overlay: local LLM evaluations, sanitized and persisted.
+
+    Research is an opt-in, non-executing overlay: it can never change the
+    deterministic strategy's decisions, risk checks, or ledger. Invalid or
+    unavailable model output degrades to a recorded HOLD (plan section 9).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    enabled: bool = False
+    prompt_template: Literal["research-v1", "research-v2"] = "research-v1"
+    evaluations_per_job: int = Field(default=2, ge=1)
+    max_response_chars: int = Field(default=8_000, ge=500, le=32_000)
+    monthly_call_budget: int = Field(default=200, ge=1)
+    closes_per_brief: int = Field(default=1, ge=1)
+    compare_with_strategy: bool = True
 
 
 class BrokerSettings(BaseModel):
@@ -385,6 +420,234 @@ class CostSettings(BaseModel):
         return self
 
 
+class SourceRefreshSpec(BaseModel):
+    """Freshness thresholds for one registry source (explicit, never guessed)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    max_age_minutes: int = Field(default=1440, ge=1)
+    backfill_sessions: int = Field(default=10, ge=0)
+
+
+class SourceSpec(BaseModel):
+    """One entry of the M3 data-source registry (plan section 8).
+
+    ``api_key_env`` names the environment variable holding an API key; the key
+    value itself never appears in configuration files or summaries. An enabled
+    source whose API cannot be reached is reported ``unreachable`` and the rest
+    of the system proceeds on the sources that did deliver: data availability
+    is fail-closed, execution authority is always live_not_authorized.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: SourceId
+    enabled: bool = False
+    symbols: list[str] = []
+    asset_classes: list[str] = []
+    api_base_url: str | None = None  # per-source override (tests / mirrors)
+    api_key_env: str | None = None
+    refresh: SourceRefreshSpec = SourceRefreshSpec()
+
+    @field_validator("symbols")
+    @classmethod
+    def _validate_symbols(cls, value: list[str]) -> list[str]:
+        cleaned = [symbol.strip() for symbol in value if symbol.strip()]
+        for symbol in cleaned:
+            if symbol.startswith(SYNTHETIC_PREFIX):
+                raise ValueError(
+                    f"data.registry: {symbol} is a synthetic {SYNTHETIC_PREFIX}* fixture "
+                    "identifier and must not be registered against a real data source"
+                )
+        return cleaned
+
+    @field_validator("asset_classes")
+    @classmethod
+    def _validate_asset_classes(cls, value: list[str]) -> list[str]:
+        allowed = {
+            "us_equity", "global_equity", "us_bond", "global_bond",
+            "us_fx", "global_fx", "us_commodity", "crypto", "synthetic-equity",
+        }
+        cleaned = [item.strip() for item in value if item.strip()]
+        for asset_class in cleaned:
+            if asset_class not in allowed:
+                raise ValueError(
+                    f"data.registry asset_classes: {asset_class!r} is not a v1 asset class "
+                    f"(expected one of: {', '.join(sorted(allowed))})"
+                )
+        return cleaned
+
+
+class DataSettings(BaseModel):
+    """Market data selection plus the M3 registry-driven source registry."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    source: Literal["synthetic"] = "synthetic"
+    fixture_seed: int = Field(default=20260504, ge=1)
+    start_session: date = date(2026, 5, 4)
+    sessions: int = Field(default=128, ge=10)
+    stale_after_sessions: int = Field(default=10, ge=1)
+    missing_scenarios: list[dict[str, str]] = []
+    scenarios: list[Literal["lost_ack"]] = []
+    registry: list[SourceSpec] = Field(
+        default_factory=lambda: [SourceSpec(id=SourceId.SYNTHETIC, enabled=True)]
+    )
+
+    @model_validator(mode="after")
+    def _validate_registry(self) -> DataSettings:
+        seen: set[str] = set()
+        for entry in self.registry:
+            if entry.id in seen:
+                raise ValueError(f"data.registry: duplicate source id {entry.id!r}")
+            seen.add(entry.id)
+            if entry.id == SourceId.SYNTHETIC and entry.enabled and entry.symbols:
+                raise ValueError(
+                    "data.registry: the synthetic source derives its universe from "
+                    "paper.synthetic_fixture_universe; do not list symbols for it"
+                )
+            if entry.enabled and entry.id != SourceId.SYNTHETIC and not entry.symbols:
+                raise ValueError(
+                    f"data.registry: enabled source {entry.id!r} must list at least one symbol"
+                )
+        return self
+
+
+class StrategySettings(BaseModel):
+    """The first deterministic strategy (rules documented before tuning)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = "trend-momentum"
+    version: str = "momentum-v1"
+    lookback_days: int = Field(default=20, ge=2)
+    entry_momentum: Decimal = Decimal("0.05")
+    exit_momentum: Decimal = Decimal("0")
+    target_weight: Decimal = Decimal("0.05")
+    order_slice_weight: Decimal = Decimal("0.02")
+
+    @model_validator(mode="after")
+    def _validate_weights(self) -> StrategySettings:
+        if self.order_slice_weight > self.target_weight:
+            raise ValueError("strategy.order_slice_weight must not exceed strategy.target_weight")
+        if self.target_weight > 1:
+            raise ValueError("strategy.target_weight must be <= 1")
+        return self
+
+
+class EngineSettings(BaseModel):
+    """Simulated venue and benchmark conventions (engineering fixtures)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    decision_offset_minutes: int = Field(default=30, ge=1)
+    commission_bps: Decimal = Decimal("0")
+    spread_bps: Decimal = Decimal("5")
+    cash_yield_annual: Decimal = Decimal("0.045")
+    passive_basket: list[str] = ["TEST_A", "TEST_B", "TEST_C"]
+
+    @field_validator("commission_bps", "spread_bps", mode="before")
+    @classmethod
+    def _validate_engine_bps(cls, value: Any, info: ValidationInfo) -> Decimal:
+        return _decimal(value, field=f"engine.{info.field_name}", allow_negative=False)
+
+    @field_validator("cash_yield_annual", mode="before")
+    @classmethod
+    def _validate_engine_yield(cls, value: Any, info: ValidationInfo) -> Decimal:
+        return _fraction(value, field="engine.cash_yield_annual")
+
+
+class BacktestCostSettings(BaseModel):
+    """Per-fill cost model for backtests (plan section 11, M3 prompt)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    fee_rate: Decimal = Decimal("0.000418")  # 0.0418% of traded notional
+    slippage_rate: Decimal = Decimal("0.0015")  # 0.15% of traded notional
+
+    @field_validator("fee_rate", "slippage_rate", mode="before")
+    @classmethod
+    def _validate_rates(cls, value: Any, info: ValidationInfo) -> Decimal:
+        return _fraction(value, field=f"backtest.cost.{info.field_name}")
+
+
+class WalkForwardSettings(BaseModel):
+    """Time-ordered walk-forward evaluation (train/validate/test, M3).
+
+    Every candidate parameter set is fitted only on data strictly before its
+    test fold; the fold's test window is never used to choose parameters.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    fold_days: int = Field(default=183, ge=10)
+    min_train_days: int = Field(default=126, ge=10)
+    score: str = "sharpe"  # or cagr
+    lookback_candidates: list[int] = [10, 20, 40]
+    entry_candidates: list[Decimal] = [Decimal("0.03"), Decimal("0.05"), Decimal("0.10")]
+    exit_candidates: list[Decimal] = [Decimal("0.00")]
+
+    @field_validator("entry_candidates", "exit_candidates", mode="before")
+    @classmethod
+    def _validate_candidates(cls, value: Any, info: ValidationInfo) -> list[Decimal]:
+        if isinstance(value, (list, tuple)) and value:
+            return [_fraction(item, field=f"backtest.walk_forward.{info.field_name}") for item in value]
+        raise ValueError(f"backtest.walk_forward.{info.field_name} must be a non-empty list")
+
+    @model_validator(mode="after")
+    def _validate_folds(self) -> WalkForwardSettings:
+        if self.fold_days < self.min_train_days:
+            raise ValueError(
+                f"backtest.walk_forward.fold_days ({self.fold_days}) must be at least "
+                f"min_train_days ({self.min_train_days})"
+            )
+        if not self.lookback_candidates or min(self.lookback_candidates) < 2:
+            raise ValueError("backtest.walk_forward.lookback_candidates must contain values >= 2")
+        if self.score not in {"sharpe", "cagr"}:
+            raise ValueError("backtest.walk_forward.score must be 'sharpe' or 'cagr'")
+        return self
+
+
+class BacktestSettings(BaseModel):
+    """Backtest run settings (M3). Inert for live/paper runs (None default)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    range_start: date
+    range_end: date
+    initial_cash_usd: Decimal = Decimal("10000")
+    cash_yield_annual: Decimal = Decimal("0.045")
+    cost: BacktestCostSettings = BacktestCostSettings()
+    walk_forward: WalkForwardSettings = WalkForwardSettings()
+    include_synthetic: bool = False  # deterministic synthetic demo of the same engine
+    output_dir: str = "reports"
+
+    @field_validator("range_start", "range_end", mode="before")
+    @classmethod
+    def _validate_range(cls, value: Any, info: ValidationInfo) -> date:
+        if isinstance(value, str):
+            return date.fromisoformat(value)
+        return value
+
+    @field_validator("initial_cash_usd", mode="before")
+    @classmethod
+    def _validate_cash(cls, value: Any) -> Decimal:
+        return _decimal(value, field="backtest.initial_cash_usd")
+
+    @field_validator("cash_yield_annual", mode="before")
+    @classmethod
+    def _validate_yield(cls, value: Any) -> Decimal:
+        return _fraction(value, field="backtest.cash_yield_annual")
+
+    @model_validator(mode="after")
+    def _validate_consistency(self) -> BacktestSettings:
+        if self.initial_cash_usd <= 0:
+            raise ValueError("backtest.initial_cash_usd must be positive")
+        if self.range_start >= self.range_end:
+            raise ValueError("backtest.range_start must be before backtest.range_end")
+        return self
+
+
 class TradingConfig(BaseModel):
     """Root configuration. Unknown sections are rejected (versioned contract)."""
 
@@ -399,6 +662,11 @@ class TradingConfig(BaseModel):
     risk: RiskSettings = RiskSettings()
     learning: LearningSettings = LearningSettings()
     costs: CostSettings = CostSettings()
+    data: DataSettings = DataSettings()
+    strategy: StrategySettings = StrategySettings()
+    engine: EngineSettings = EngineSettings()
+    research: ResearchSettings = ResearchSettings()
+    backtest: BacktestSettings | None = None
 
     def _fail(self, violations: list[str]) -> None:
         if violations:
@@ -426,6 +694,18 @@ class TradingConfig(BaseModel):
                 "universe.live_instrument_allowlist overlaps the synthetic fixture universe "
                 f"({', '.join(sorted(overlap))}); simulation and live symbol sets must be "
                 "independent (plan section 22)"
+            )
+
+        if self.research.enabled and live_mode:
+            violations.append(
+                "research.enabled=true is not permitted in a live mode yet: M2 research "
+                "is a simulation-only overlay (plan section 9); enable it in a non-live mode"
+            )
+        if self.research.evaluations_per_job > self.llm.max_calls_per_research_job:
+            violations.append(
+                f"research.evaluations_per_job={self.research.evaluations_per_job} exceeds "
+                f"llm.max_calls_per_research_job={self.llm.max_calls_per_research_job}: the "
+                "per-job call budget is the enforcement ceiling (plan section 9)"
             )
 
         if live_mode:
@@ -475,6 +755,7 @@ class TradingConfig(BaseModel):
                 "exchange_timezone": self.app.exchange_timezone,
                 "web_host": self.app.web_host,
                 "web_port": self.app.web_port,
+                "db_url_host": (urlparse(self.app.db_url).hostname or ""),
             },
             "llm": self.llm.sanitized_summary(),
             "broker": {
@@ -508,6 +789,34 @@ class TradingConfig(BaseModel):
             "costs": {
                 "paid_data_budget_usd_per_month": str(self.costs.paid_data_budget_usd_per_month),
                 "allow_paid_subscriptions": self.costs.allow_paid_subscriptions,
+            },
+            "data": {
+                "source": self.data.source,
+                "fixture_seed": self.data.fixture_seed,
+                "start_session": self.data.start_session.isoformat(),
+                "sessions": self.data.sessions,
+                "registry": [
+                    {
+                        "id": entry.id,
+                        "enabled": entry.enabled,
+                        "symbols": entry.symbols,
+                        "asset_classes": entry.asset_classes,
+                        "api_base_url": entry.api_base_url,
+                        "api_key_configured": bool(entry.api_key_env and os.environ.get(entry.api_key_env)),
+                        "refresh": entry.refresh.model_dump(mode="json"),
+                    }
+                    for entry in self.data.registry
+                ],
+            },
+            "strategy": {
+                "name": self.strategy.name,
+                "version": self.strategy.version,
+                "lookback_days": self.strategy.lookback_days,
+            },
+            "research": {
+                "enabled": self.research.enabled,
+                "prompt_template": self.research.prompt_template,
+                "evaluations_per_job": self.research.evaluations_per_job,
             },
             "authority": self.authority(),
         }

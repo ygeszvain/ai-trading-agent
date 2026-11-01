@@ -15,6 +15,7 @@ app:
   exchange_timezone: America/New_York
   web_host: "127.0.0.1"
   web_port: 8000
+  db_url: postgresql+psycopg://trading_agent@127.0.0.1:5433/trading_agent
 
 llm:
   provider: lmstudio
@@ -89,3 +90,28 @@ costs:
   paid_data_budget_usd_per_month: "0"
   allow_paid_subscriptions: false
   operating_cost_reporting_enabled: true
+
+data:
+  source: synthetic
+  fixture_seed: 20260504
+  start_session: "2026-05-04"
+  sessions: 128
+  stale_after_sessions: 1
+  missing_scenarios: []
+  scenarios: []
+
+strategy:
+  name: trend-momentum
+  version: momentum-v1
+  lookback_days: 20
+  entry_momentum: "0.05"
+  exit_momentum: "0.0"
+  target_weight: "0.05"
+  order_slice_weight: "0.02"
+
+engine:
+  decision_offset_minutes: 30
+  commission_bps: "0"
+  spread_bps: "5"
+  cash_yield_annual: "0.045"
+  passive_basket: []

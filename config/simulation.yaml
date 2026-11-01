@@ -13,6 +13,7 @@ app:
   exchange_timezone: America/New_York
   web_host: "127.0.0.1"           # loopback-only by design
   web_port: 8000                  # must not conflict with LM Studio (default 1234)
+  db_url: postgresql+psycopg://trading_agent@127.0.0.1:5433/trading_agent   # loopback-only disposable DB
 
 llm:
   provider: lmstudio              # only provider implemented in v1
@@ -43,6 +44,7 @@ paper:
   synthetic_fixture_universe:
     - TEST_A
     - TEST_B
+    - TEST_C
 
 universe:
   live_instrument_allowlist: []   # synthetic TEST_* IDs are never valid here
@@ -87,3 +89,52 @@ costs:
   paid_data_budget_usd_per_month: "0"
   allow_paid_subscriptions: false
   operating_cost_reporting_enabled: true
+
+# M1 additions (plan section 22: source/strategy-specific controls are added
+# as those modules are implemented). All values are engineering fixtures.
+data:
+  source: synthetic                 # no network; plan section 8 registry gates real sources later
+  fixture_seed: 20260504
+  start_session: "2026-05-04"
+  sessions: 128
+  # Staleness rule for session-granular data: an observation is STALE once it
+  # is at least this many sessions old. 1 == "observed in the current session".
+  # The TEST_B 2026-08-10/11 gap therefore shows as stale on those two sessions.
+  stale_after_sessions: 1
+  # Explicit missing/stale scenario for the fixture (website must show it,
+  # never fabricate a price): TEST_B has a 2-session gap mid-run.
+  missing_scenarios:
+    - instrument: TEST_B
+      from: "2026-08-10"
+      to: "2026-08-11"
+  # Named deterministic fixture scenarios (documented in docs/fill_simulation.md):
+  #   lost_ack — the first submission of the run loses its acknowledgment and
+  #     stays UNKNOWN until end-of-session reconciliation resolves it.
+  scenarios:
+    - lost_ack
+
+strategy:
+  name: trend-momentum
+  version: momentum-v1              # rules documented in docs/strategy_momentum_v1.md
+  lookback_days: 20
+  entry_momentum: "0.05"
+  exit_momentum: "0.0"
+  target_weight: "0.05"             # equals the paper max-position limit (plan section 13)
+  order_slice_weight: "0.02"        # equals the max-single-order limit
+
+research:
+  enabled: false               # M2 overlay is opt-in; deterministic runs stay reproducible
+  prompt_template: research-v1
+  evaluations_per_job: 2       # per research job; must not exceed llm.max_calls_per_research_job
+  max_response_chars: 8000
+  compare_with_strategy: true  # store the deterministic decision alongside for comparison
+
+engine:
+  decision_offset_minutes: 30       # one scheduled decision after the first 30 minutes (plan section 17)
+  commission_bps: "0"               # synthetic venue: zero commission
+  spread_bps: "5"                   # half-spread embedded in executable limits
+  cash_yield_annual: "0.045"        # documented assumption for the cash baseline
+  passive_basket:                   # equal-weight buy-and-hold comparison portfolio
+    - TEST_A
+    - TEST_B
+    - TEST_C
