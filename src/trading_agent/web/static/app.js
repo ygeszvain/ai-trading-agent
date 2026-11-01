@@ -3,26 +3,36 @@
 
 const TA = {
   async api(path) {
-    const res = await fetch(path, { headers: { Accept: "application/json" } });
+    const selected = new URLSearchParams(window.location.search).get("run_id");
+    const scoped = new URL(path, window.location.origin);
+    if (selected && !scoped.searchParams.has("run_id")) scoped.searchParams.set("run_id", selected);
+    let res;
+    try { res = await fetch(scoped, { headers: { Accept: "application/json" } }); }
+    catch (error) { this.failure(); throw error; }
     if (res.status === 401) {
       window.location.replace("/auth/login");
       throw new Error("unauthenticated");
     }
-    if (!res.ok) throw new Error(`${path} -> HTTP ${res.status}`);
+    if (!res.ok) { this.failure(); throw new Error(`read failed: HTTP ${res.status}`); }
     return res.json();
   },
+  failure() {
+    let el = document.querySelector("[data-read-error]");
+    if (!el) { el = document.createElement("p"); el.dataset.readError = "";
+      el.setAttribute("role", "alert"); document.querySelector("main")?.prepend(el); }
+    el.textContent = "Read unavailable. Displayed history may be stale; no trading action was performed.";
+  },
   money(v) {
-    if (v === null || v === undefined) return "-";
-    return Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    if (v === null || v === undefined) return "unavailable";
+    const raw = String(v);
+    const [whole, fraction] = raw.split(".");
+    return this.esc(whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (fraction ? "." + fraction : ""));
   },
-  num(v) {
-    if (v === null || v === undefined) return "-";
-    return Number(v).toLocaleString("en-US", { maximumFractionDigits: 4 });
-  },
+  num(v) { return this.money(v); },
   ts(v) {
     if (!v) return "-";
     try { return new Date(v).toISOString().replace("T", " ").slice(0, 19) + "Z"; }
-    catch { return String(v); }
+    catch { return this.esc(v); }
   },
   esc(v) {
     return String(v ?? "").replace(/[&<>"']/g, (c) => (
@@ -40,6 +50,8 @@ const TA = {
   table(el, columns, rows) {
     const box = document.querySelector(el);
     if (!box) return;
+    box.style.overflowX = "auto";
+    box.tabIndex = 0;
     const head = columns.map((c) =>
       `<th class="${c.align || ""}">${this.esc(c.label)}</th>`).join("");
     const body = rows.map((r) =>
@@ -65,8 +77,17 @@ const TA = {
     return `run_id=${encodeURIComponent(sel.value)}`;
   },
   chart(el, series) {
-    const box = document.querySelector(el);
+    const box = typeof el === "string" ? document.querySelector(el) : el;
     if (!box) return;
+    if (series.some((p) => p.book)) {
+      box.replaceChildren();
+      for (const book of [...new Set(series.map((p) => p.book))]) {
+        const heading = document.createElement("p"); heading.textContent = book + " — SIMULATION USD";
+        const panel = document.createElement("div"); box.append(heading, panel);
+        TA.chart(panel, series.filter((p) => p.book === book).map(({book, ...p}) => p));
+      }
+      return;
+    }
     const points = series.filter((p) => p.equity !== null && p.equity !== undefined);
     if (points.length < 2) { box.innerHTML = '<p class="muted" style="padding:12px">not enough data to chart</p>'; return; }
     const w = 1100, h = 220, pad = 10;
@@ -86,15 +107,37 @@ const TA = {
   },
 };
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
   const runSel = document.querySelector("[data-run-select]");
-  if (runSel) runSel.addEventListener("change", () => window.location.reload());
+  if (runSel) runSel.addEventListener("change", () => {
+    const url = new URL(window.location.href); url.searchParams.set("run_id", runSel.value);
+    window.location.assign(url);
+  });
   const page = document.body.dataset.page;
+  if (page !== "login" && page !== "learning") {
+    try {
+      const listed = runSel ? await TA.loadRuns(runSel) : (await TA.api("/api/v1/runs")).payload.runs;
+      const url = new URL(window.location.href);
+      if (!url.searchParams.has("run_id") && listed.length) {
+        url.searchParams.set("run_id", listed[0].run_id); window.history.replaceState(null, "", url);
+      }
+      if (runSel) runSel.value = url.searchParams.get("run_id") || "";
+    } catch { TA.failure(); return; }
+  }
+  document.addEventListener("click", (event) => {
+    const anchor = event.target.closest("a[href]");
+    if (!anchor) return;
+    const url = new URL(anchor.href, window.location.origin);
+    const run = new URLSearchParams(window.location.search).get("run_id");
+    if (run && url.origin === window.location.origin && !url.pathname.startsWith("/auth/")
+        && url.pathname !== "/learning") { url.searchParams.set("run_id", run); anchor.href = url; }
+  });
+
   if (page === "overview") {
     TA.api("/api/v1/health").then((env) => {
       document.querySelector("[data-health]").innerHTML =
         `<span class="muted">db:${env.payload.database} web:${env.payload.web} recon:${TA.esc(env.payload.last_reconciliation)}</span>`;
-    }).catch(() => {});
+    }).catch(() => TA.failure());
     TA.api("/api/v1/overview" + (runSel && runSel.value ? "?" + TA.runParam() : "")).then((env) => {
       const p = env.payload;
       if (p.note) document.querySelector("[data-overview-note]").textContent = p.note;
@@ -114,7 +157,7 @@ document.addEventListener("DOMContentLoaded", () => {
       ], p.books);
       const q = runSel && runSel.value ? "?" + TA.runParam() : "";
       TA.api("/api/v1/equity-curve" + q).then((c) => TA.chart("[data-chart]", (c.payload.series || []).slice(-500)));
-    }).catch(() => {});
+    }).catch(() => TA.failure());
   }
   if (page === "portfolio") {
     const q = runSel && runSel.value ? "?" + TA.runParam() : "";
@@ -133,7 +176,7 @@ document.addEventListener("DOMContentLoaded", () => {
         { label: "Market value", align: "right", cls: "num", render: (r) => "$" + TA.money(r.market_value) },
         { label: "Mark as of", render: (r) => `<span class="muted">${TA.ts(r.mark_as_of)}</span>` },
       ], p.positions);
-    }).catch(() => {});
+    }).catch(() => TA.failure());
   }
   if (page === "orders") {
     const load = () => {
@@ -152,7 +195,7 @@ document.addEventListener("DOMContentLoaded", () => {
           { label: "Status", render: (r) => `<span class="${/fail|cancel|reject/i.test(r.status || "") ? "error" : ""}">${TA.esc(r.status)}</span>` },
           { label: "Updated", render: (r) => `<span class="muted">${TA.ts(r.updated_at)}</span>` },
         ], env.payload.orders);
-      }).catch(() => {});
+      }).catch(() => TA.failure());
     };
     document.querySelector("[data-status-filter]")?.addEventListener("change", load);
     load();
@@ -184,7 +227,7 @@ document.addEventListener("DOMContentLoaded", () => {
         { label: "Price", align: "right", cls: "num", render: (r) => "$" + TA.money(r.price) },
         { label: "Fee", align: "right", cls: "num", render: (r) => TA.money(r.fee) },
       ], p.fills);
-    }).catch(() => {});
+    }).catch(() => TA.failure());
   }
   if (page === "activity") {
     let cursor = null;
@@ -202,9 +245,10 @@ document.addEventListener("DOMContentLoaded", () => {
           { label: "Ts", render: (r) => `<span class="muted">${TA.ts(r.ts)}</span>` },
           { label: "Origin", render: (r) => `<span class="muted">${TA.esc(r.origin)}</span>` },
           { label: "Type", render: (r) => TA.esc(r.event_type) },
+          { label: "Corrected by", render: (r) => TA.esc(r.corrected_by || "-") },
           { label: "Payload", render: (r) => `<span class="mono">${TA.esc(JSON.stringify(r.payload)).slice(0, 120)}</span>` },
         ], events);
-      }).catch(() => {});
+      }).catch(() => TA.failure());
     };
     document.querySelector("[data-load-more]")?.addEventListener("click", load);
     load();
@@ -220,18 +264,19 @@ document.addEventListener("DOMContentLoaded", () => {
         TA.flags("[data-flags-prices]", pe);
         TA.table("[data-prices]", [
           { label: "Ts", render: (r) => TA.ts(r.ts) },
-          { label: "Bid", align: "right", cls: "num", render: (r) => TA.money(r.bid) },
-          { label: "Ask", align: "right", cls: "num", render: (r) => TA.money(r.ask) },
-          { label: "Last", align: "right", cls: "num", render: (r) => TA.money(r.last) },
-        ], (pe.payload.prices || []).slice(-50));
-      }).catch(() => {});
-    }).catch(() => {});
+          { label: "Close", render: (r) => TA.money(r.close) },
+          { label: "Quality", render: (r) => TA.esc(r.quality) },
+        ], [...(pe.payload.bars || []), ...(pe.payload.missing_ticks || []).map((ts) =>
+          ({ ts, close: null, quality: "missing" }))].sort((a, b) => a.ts.localeCompare(b.ts)).slice(-50));
+      }).catch(() => TA.failure());
+    }).catch(() => TA.failure());
   }
   if (page === "login") {
     const form = document.querySelector("[data-login-form]");
     form?.addEventListener("submit", async (e) => {
       e.preventDefault();
       const token = form.token.value;
+      form.token.value = "";
       const res = await fetch("/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/x-www-form-urlencoded" },

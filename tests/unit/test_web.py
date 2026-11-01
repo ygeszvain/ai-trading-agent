@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import stat
 
 from fastapi.testclient import TestClient
@@ -31,7 +30,7 @@ def test_ensure_bootstrap_creates_600_file(tmp_path, monkeypatch) -> None:
     assert len(store.owner_token) >= 20
 
 
-def test_host_guard_rejects_mismatched_host(valid_config_dict) -> None:
+def test_host_guard_rejects_mismatched_host(valid_config_dict, monkeypatch) -> None:
     config = TradingConfig.model_validate(valid_config_dict)
 
     store = web_auth.AuthStore(
@@ -39,9 +38,13 @@ def test_host_guard_rejects_mismatched_host(valid_config_dict) -> None:
         owner_token="owner-token-1",
         session_secret="session-secret-1",
     )
+    from tests.auth_helpers import auth_only_engine, register_cookie
+
+    engine = auth_only_engine()
+    monkeypatch.setattr("trading_agent.web.app.create_app_engine", lambda *a, **kw: engine)
     app = build_app(config, auth_store=store)
     client = TestClient(app, raise_server_exceptions=False)
-    cookie = f"{web_auth.SESSION_COOKIE}={web_auth.issue_session(store)}"
+    cookie = f"{web_auth.SESSION_COOKIE}={register_cookie(engine, store)}"
     host_ok = f"{config.app.web_host}:{config.app.web_port}"
     host_bad = "10.0.0.5:8000"
 
@@ -50,10 +53,9 @@ def test_host_guard_rejects_mismatched_host(valid_config_dict) -> None:
     assert response.status_code == 302
     assert response.headers["location"] == "/auth/login"
 
-    # A valid session on the matching host gets through the guard (the
-    # route itself may fail on the database; that is not a guard rejection).
+    # A valid persisted session on the matching host renders the page.
     response = client.get("/", headers={"host": host_ok, "cookie": cookie})
-    assert response.status_code not in (302, 401, 403)
+    assert response.status_code == 200
 
     # The same valid session on a mismatched host is rejected outright.
     response = client.get("/", headers={"host": host_bad, "cookie": cookie})

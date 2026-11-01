@@ -74,7 +74,7 @@ def _parse_env_bool(raw: str, name: str) -> bool:
         return True
     if lowered in _FALSE:
         return False
-    raise ConfigError([f"{name}: {raw!r} is not a boolean (expected true/false)"])
+    raise ConfigError([f"{name}: invalid boolean (expected true/false)"])
 
 
 def _apply_env_overrides(data: dict[str, Any], env: ConfigEnvironment) -> None:
@@ -91,7 +91,7 @@ def _apply_env_overrides(data: dict[str, Any], env: ConfigEnvironment) -> None:
             try:
                 section_data[key] = int(raw)
             except ValueError as exc:
-                raise ConfigError([f"{env_name}: {raw!r} is not an integer port"]) from exc
+                raise ConfigError([f"{env_name}: invalid integer port"]) from exc
         elif key == "auth_token":
             section_data[key] = raw
         else:
@@ -104,8 +104,8 @@ def _load_yaml(path: Path, violations: list[str]) -> dict[str, Any] | None:
         return None
     try:
         raw = yaml.safe_load(path.read_text(encoding="utf-8"))
-    except yaml.YAMLError as exc:
-        violations.append(f"config file {path} is not valid YAML: {exc}")
+    except yaml.YAMLError:
+        violations.append(f"config file {path} is not valid YAML; input withheld")
         return None
     if raw is None:
         return {}

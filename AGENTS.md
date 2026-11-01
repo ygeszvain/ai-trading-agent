@@ -4,7 +4,7 @@
 
 Build a single-owner local research/trading application. Codex develops the software; LM Studio supplies local research inference. The unattended application must operate independently of an interactive Codex session. Deterministic risk, authorization, ledger, and reconciliation services govern financial behavior. Profitability is an unproven research hypothesis.
 
-Prompt 1 (M0) acceptance is recorded as of 2026-10-31. On 2026-11-01 the owner explicitly selected Prompt 9's research-only learning work despite unresolved earlier acceptance. Its local offline implementation and limitations are recorded in docs/build_status.md and docs/research_learning.md. This does not certify M1–M5 or authorize live promotion. The next numbered prompt is Prompt 10, only when explicitly selected. Inspect docs/build_status.md before claiming progress.
+Prompt 1 (M0) acceptance is recorded as of 2026-10-31. On 2026-11-01 the owner explicitly selected Prompt 9's research-only learning work despite unresolved earlier acceptance. Its local offline implementation and limitations are recorded in docs/build_status.md and docs/research_learning.md. This does not certify M1–M5 or authorize live promotion. Prompt 10's offline security review is complete with concrete patches and an evidence matrix in docs/security_readiness_review.md; overall readiness remains FAIL. The next numbered prompt is Prompt 11, only when explicitly selected and without bypassing unresolved upstream dependencies. Inspect docs/build_status.md before claiming progress.
 
 ## Publication scope — November 1, 2026
 

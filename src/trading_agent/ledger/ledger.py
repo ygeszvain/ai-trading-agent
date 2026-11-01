@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 from ..contracts.market import QualityFlag
 from ..contracts.orders import Fill, OrderSide
 from ..contracts.portfolio import PortfolioSnapshot, Position
-from ..db.schema import ledger_events
+from ..db.schema import fills, ledger_events, runs
 from ..money import round_money
 
 
@@ -65,6 +65,9 @@ class Ledger:
         self._applied: set[str] = set()
         self._pending: list[dict[str, Any]] = []
         self._dirty = False
+        self._failed = False
+        self._persisted_keys: set[str] = set()
+        self._raw_fills: dict[str, tuple[str, str, Decimal, Decimal, Decimal]] = {}
         self._initial_ts = initial_ts
         if not self._load_from_db():
             self._cash = Decimal("0")
@@ -96,6 +99,8 @@ class Ledger:
         marks: dict[str, tuple[Decimal | None, datetime | None, QualityFlag]],
         reconciliation_status: str = "unverified",
     ) -> PortfolioSnapshot:
+        if self._failed:
+            raise LedgerInvariantError("ledger failed; rollback and reconstruct before reuse")
         positions: list[Position] = []
         gross = Decimal("0")
         for instrument_id, state in sorted(self._positions.items()):
@@ -106,6 +111,10 @@ class Ledger:
                 price, mark_as_of, quality = None, None, QualityFlag.MISSING
             else:
                 price, mark_as_of, quality = mark
+            if price is None:
+                raise LedgerInvariantError(
+                    "held position mark missing; NAV and new risk unavailable"
+                )
             mark_stale = quality is QualityFlag.STALE
             value = state.quantity * (price if price is not None else Decimal("0"))
             if price is not None:
@@ -146,6 +155,18 @@ class Ledger:
 
     def apply_fill(self, fill: Fill, *, at: datetime | None = None) -> bool:
         """Apply one fill exactly once. Returns False (no-op) on duplicate."""
+        if self._failed:
+            raise LedgerInvariantError("ledger failed; rollback and reconstruct before reuse")
+        if fill.run_id != self._run_id or fill.corrected_by is not None:
+            raise LedgerInvariantError(
+                "fill scope mismatch or unsupported correction requires review"
+            )
+        fingerprint = (fill.side.value, fill.instrument_id, fill.quantity, fill.price, fill.fee)
+        previous = self._raw_fills.get(fill.raw_fill_id)
+        if previous is not None:
+            if previous != fingerprint:
+                raise LedgerInvariantError("conflicting duplicate fill requires correction review")
+            return False
         key = self._event_key("fill", fill.raw_fill_id, fill.fill_id)
         if key in self._applied:
             return False
@@ -154,7 +175,7 @@ class Ledger:
         quantity = round_money(fill.quantity)
         price = round_money(fill.price)
         fee = round_money(fill.fee)
-        if quantity <= 0 or price < 0:
+        if quantity <= 0 or price <= 0 or fee < 0:
             raise LedgerInvariantError(
                 f"fill {fill.fill_id}: nonpositive quantity or negative price"
             )
@@ -171,7 +192,7 @@ class Ledger:
             new_qty = state.quantity + quantity
             if new_qty > 0:
                 state.average_cost = round_money(
-                    (state.quantity * state.average_cost + quantity * price) / new_qty
+                    (state.quantity * state.average_cost + quantity * price + fee) / new_qty
                 )
             state.quantity = new_qty
         else:
@@ -181,6 +202,8 @@ class Ledger:
                     "a sell cannot create a short position"
                 )
             proceeds = round_money(quantity * price) - fee
+            if before_cash + proceeds < 0:
+                raise LedgerInvariantError("sell fees would drive cash negative")
             self._cash = before_cash + proceeds
             state.realized_pnl = round_money(
                 state.realized_pnl + proceeds - quantity * state.average_cost
@@ -191,6 +214,7 @@ class Ledger:
         if self._cash < 0:
             raise LedgerInvariantError(f"fill {fill.fill_id} drives cash negative: {self._cash}")
         self._applied.add(key)
+        self._raw_fills[fill.raw_fill_id] = fingerprint
         self._pending.append(
             self._row(
                 event_id=key,
@@ -224,14 +248,17 @@ class Ledger:
         instrument_id: str | None = None,
     ) -> bool:
         """Apply a cash movement (accrual, deposit, fee) exactly once."""
+        if self._failed:
+            raise LedgerInvariantError("ledger failed; rollback and reconstruct before reuse")
         ref = f"{ref_type or kind}:{ref_id or kind}:{ts.isoformat()}"
         key = self._event_key(kind, ref)
         if key in self._applied or not self._db_key_absent(key):
             return False
         before = self.cash
-        self._cash = round_money(before + amount)
-        if self._cash < 0:
-            raise LedgerInvariantError(f"cash flow {kind} drives cash negative: {self._cash}")
+        proposed = round_money(before + amount)
+        if not proposed.is_finite() or proposed < 0:
+            raise LedgerInvariantError("cash flow would make cash negative or nonfinite")
+        self._cash = proposed
         self._applied.add(key)
         self._pending.append(
             self._row(
@@ -259,11 +286,34 @@ class Ledger:
         """Persist pending events (call inside the caller's transaction)."""
         if not self._pending:
             return 0
+        if self._failed:
+            raise LedgerInvariantError("ledger failed; rollback and reconstruct before reuse")
         inserted = 0
-        for row in self._pending:
-            if self._db_key_absent(row["event_key"]):
+        try:
+            if (
+                self._session.execute(
+                    select(runs.c.run_id).where(runs.c.run_id == self._run_id).with_for_update()
+                ).first()
+                is None
+            ):
+                raise LedgerInvariantError("ledger run is not persisted")
+            current: set[str] = set(
+                self._session.execute(
+                    select(ledger_events.c.event_key).where(
+                        ledger_events.c.run_id == self._run_id,
+                        ledger_events.c.portfolio_key == self._portfolio_key,
+                    )
+                ).scalars()
+            )
+            if current != self._persisted_keys:
+                raise LedgerInvariantError("concurrent ledger update; rollback and reconstruct")
+            for row in self._pending:
                 self._session.execute(ledger_events.insert().values(**row))
+                self._persisted_keys.add(row["event_key"])
                 inserted += 1
+        except Exception:
+            self._failed = True
+            raise
         self._pending = []
         self._dirty = False
         return inserted
@@ -280,11 +330,31 @@ class Ledger:
         ).all()
         if not rows:
             return False
+        if len({row.ts for row in rows}) != len(rows):
+            raise LedgerInvariantError(
+                "ambiguous equal-timestamp history requires reviewed durable ordering"
+            )
         cash = Decimal("0")
         for row in rows:
             cash = row.cash_after if row.cash_after is not None else cash
             self._applied.add(row.event_key)
+            self._persisted_keys.add(row.event_key)
             if row.kind == "fill" and row.ref_id is not None:
+                record = self._session.execute(
+                    select(fills).where(
+                        fills.c.run_id == self._run_id,
+                        fills.c.fill_id == row.ref_id,
+                    )
+                ).first()
+                if record is None:
+                    raise LedgerInvariantError("fill evidence missing during replay")
+                self._raw_fills[record.raw_fill_id] = (
+                    record.side,
+                    record.instrument_id,
+                    record.quantity,
+                    record.price,
+                    record.fee,
+                )
                 self._apply_fill_row(row)
         self._cash = cash
         return True
@@ -302,7 +372,7 @@ class Ledger:
             new_qty = state.quantity + quantity
             if new_qty > 0:
                 state.average_cost = round_money(
-                    (state.quantity * state.average_cost + quantity * price) / new_qty
+                    (state.quantity * state.average_cost + quantity * price + fee) / new_qty
                 )
             state.quantity = new_qty
         else:
@@ -319,9 +389,15 @@ class Ledger:
         from ..db.schema import fills
 
         record = self._session.execute(
-            select(fills.c.side).where(fills.c.fill_id == row.ref_id)
+            select(fills.c.side).where(
+                fills.c.fill_id == row.ref_id, fills.c.run_id == self._run_id
+            )
         ).first()
-        return record[0] if record else "buy"
+        if record is None or record[0] not in {"buy", "sell"}:
+            raise LedgerInvariantError(
+                "persisted fill side is unavailable; refusing guessed replay"
+            )
+        return str(record[0])
 
     def _row(self, **values: Any) -> dict[str, Any]:
         base = {

@@ -7,7 +7,7 @@
 <link rel="stylesheet" href="/static/style.css">
 <script src="/static/app.js" defer></script>
 </head>
-<body data-page="{{ page | default('') }}">
+<body data-page="{{ page | default('') }}" data-order-id="{{ order_id | default('') }}" data-instrument-id="{{ instrument_id | default('') }}">
 <header>
   <span class="title">trading-agent</span>
   <span class="badge {{ label | lower }}">{{ label }}</span>
@@ -18,7 +18,7 @@
     <a href="/orders">Orders</a>
     <a href="/activity">Activity</a>
     <a href="/learning">Learning</a>
-    <a href="/auth/logout" rel="nofollow">Logout</a>
+    <form method="post" action="/auth/logout"><button type="submit">Logout</button></form>
   </nav>
 </header>
 <main>

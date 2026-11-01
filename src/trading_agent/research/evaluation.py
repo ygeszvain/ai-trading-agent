@@ -32,12 +32,21 @@ class EvaluatedOutput:
 
 
 def _sanitize_json_string(value: str) -> str:
-    return sanitize_text(value)[:MAX_ITEM_CHARS]
+    return sanitize_text(value)[0][:MAX_ITEM_CHARS]
 
 
 def _validate_structured(data: object) -> EvaluatedOutput:
     if not isinstance(data, dict):
         return _invalid("not a JSON object")
+    if set(data) != {
+        "view",
+        "confidence",
+        "key_factors",
+        "risk_flags",
+        "summary",
+        "agrees_with_strategy",
+    }:
+        return _invalid("structured fields are missing or unknown")
     view = data.get("view")
     if not isinstance(view, str) or view not in VALID_VIEWS:
         return _invalid(f"view must be one of {sorted(VALID_VIEWS)}")
@@ -51,9 +60,13 @@ def _validate_structured(data: object) -> EvaluatedOutput:
 
     def _string_list(key: str) -> tuple[str, ...] | None:
         raw = data.get(key, [])
-        if not isinstance(raw, list) or len(raw) > MAX_LIST_ITEMS:
+        if (
+            not isinstance(raw, list)
+            or len(raw) > MAX_LIST_ITEMS
+            or not all(isinstance(v, str) for v in raw)
+        ):
             return None
-        return tuple(_sanitize_json_string(str(item)) for item in raw)
+        return tuple(_sanitize_json_string(item) for item in raw)
 
     key_factors = _string_list("key_factors")
     if key_factors is None:
@@ -72,12 +85,12 @@ def _validate_structured(data: object) -> EvaluatedOutput:
         "confidence": float(confidence),
         "key_factors": list(key_factors),
         "risk_flags": list(risk_flags),
-        "summary": sanitize_text(summary)[:500],
+        "summary": sanitize_text(summary)[0][:500],
         "agrees_with_strategy": agrees,
     }
     return EvaluatedOutput(
         output_status="ok",
-        response_text=sanitize_text(json.dumps(structured, sort_keys=True)),
+        response_text=sanitize_text(json.dumps(structured, sort_keys=True))[0],
         structured=structured,
         error_class=None,
         error_message=None,
@@ -100,7 +113,7 @@ def _model_error(error: Exception) -> EvaluatedOutput:
         response_text=None,
         structured=None,
         error_class=type(error).__name__,
-        error_message=str(error)[:500],
+        error_message="classified model failure",
     )
 
 
@@ -109,8 +122,10 @@ def evaluate_output(text: str, *, prompt_version: str) -> EvaluatedOutput:
     if not text.strip():
         return _invalid("empty response")
     if len(text) > MAX_RESPONSE_CHARS:
-        text = text[:MAX_RESPONSE_CHARS]
-    if prompt_version == "v2":
+        return _invalid("response exceeds output budget")
+    if prompt_version not in {"v1", "v2", "research-v1", "research-v2"}:
+        return _invalid("unknown prompt version")
+    if prompt_version in {"v2", "research-v2"}:
         candidate = text.strip()
         if candidate.startswith("```"):
             candidate = candidate.strip("`")
@@ -125,7 +140,7 @@ def evaluate_output(text: str, *, prompt_version: str) -> EvaluatedOutput:
     # v1: free-form prose — sanitized and length-bounded only.
     return EvaluatedOutput(
         output_status="ok",
-        response_text=sanitize_text(text),
+        response_text=sanitize_text(text)[0],
         structured=None,
         error_class=None,
         error_message=None,

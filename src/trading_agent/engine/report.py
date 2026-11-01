@@ -184,13 +184,10 @@ def _session_gap(session: Session, run_id: str, instrument_id: str) -> int:
 def _final_marks(session: Session, run_id: str) -> dict[str, dict[str, str | None]]:
     """Latest persisted bar per instrument; staleness judged at the run end."""
     rows = session.execute(
-        select(
-            market_bars.c.instrument_id,
-            func.max(market_bars.c.ts),
-            market_bars.c.close,
-        )
+        select(market_bars.c.instrument_id, market_bars.c.ts, market_bars.c.close)
         .where(market_bars.c.run_id == run_id)
-        .group_by(market_bars.c.instrument_id)
+        .distinct(market_bars.c.instrument_id)
+        .order_by(market_bars.c.instrument_id, market_bars.c.ts.desc())
     ).all()
     watermark = session.execute(
         select(func.max(market_bars.c.ts)).where(market_bars.c.run_id == run_id)
@@ -219,7 +216,7 @@ def _rederive_realized_pnl(session: Session, run_id: str, portfolio_key: str) ->
             )
             .order_by(ledger_events.c.ts, ledger_events.c.event_id)
         )
-    ).scalars()
+    ).all()
     sides: dict[str, str] = dict(
         session.execute(select(fills.c.fill_id, fills.c.side).where(fills.c.run_id == run_id)).all()
     )
@@ -238,7 +235,7 @@ def _rederive_realized_pnl(session: Session, run_id: str, portfolio_key: str) ->
             new_qty = held + qty
             if new_qty > 0:
                 average_cost[event.instrument_id] = round_money(
-                    (held * average_cost.get(event.instrument_id, Decimal("0")) + qty * price)
+                    (held * average_cost.get(event.instrument_id, Decimal("0")) + qty * price + fee)
                     / new_qty
                 )
             quantity[event.instrument_id] = new_qty
@@ -255,7 +252,7 @@ def _rederive_realized_pnl(session: Session, run_id: str, portfolio_key: str) ->
 
 def build_report(session: Session, config: TradingConfig, run_id: str) -> ReportData:
     """Build the report for one run entirely from its persisted rows."""
-    run = session.execute(select(runs).where(runs.c.run_id == run_id)).scalar_one_or_none()
+    run = session.execute(select(runs).where(runs.c.run_id == run_id)).first()
     if run is None:
         raise RunNotFoundError(f"run {run_id!r} not found")
 

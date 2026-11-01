@@ -111,6 +111,9 @@ def evaluate_live_activation(
 
     checks = (
         ActivationCheck(
+            "build_live_dispatch_disabled", False, "live dispatch is not implemented or authorized"
+        ),
+        ActivationCheck(
             "live_enabled_flag",
             config.live.enabled,
             "live.enabled is " + ("true" if config.live.enabled else "false"),

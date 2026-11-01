@@ -5,19 +5,19 @@ Deterministic: fixed field order, quantized decimals, chronological rows.
 
 from __future__ import annotations
 
-import csv
 import json
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
 
+from ..security.exports import SafeCsvWriter
 from .engine import BacktestRun
 
 _FX = Decimal("0.000001")
 
 
-def _money(value: Decimal | None) -> str:
-    return f"{value.quantize(Decimal('0.01'))}" if value is not None else None
+def _money(value: Decimal | None) -> str | None:
+    return format(value, "f") if value is not None else None
 
 
 def _num(value: Decimal | float | None) -> str | None:
@@ -144,7 +144,7 @@ def write_report_package(run: BacktestRun, directory: Path) -> list[Path]:
 
     equity_path = directory / "equity.csv"
     with equity_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
+        writer = SafeCsvWriter(handle)
         writer.writerow(
             [
                 "session",
@@ -173,7 +173,7 @@ def write_report_package(run: BacktestRun, directory: Path) -> list[Path]:
 
     fills_path = directory / "fills.csv"
     with fills_path.open("w", newline="", encoding="utf-8") as handle:
-        writer = csv.writer(handle)
+        writer = SafeCsvWriter(handle)
         writer.writerow(["session", "instrument_id", "side", "price", "quantity", "fee"])
         for book in run.books:
             for fill_session, side, price, quantity, fee in sorted(book.fills):
@@ -208,13 +208,13 @@ def render_markdown(run: BacktestRun) -> str:
     add(f"- Range: {run.range_start} .. {run.range_end} ({len(run.sessions)} sessions)")
     add(f"- Instruments: {', '.join(run.instrument_ids)}")
     add(
-            f"- Capital: {run.settings.initial_cash_usd} per book; cash yield {run.settings.cash_yield_annual} annual (daily-compounded)"
+        f"- Capital: {run.settings.initial_cash_usd} per book; cash yield {run.settings.cash_yield_annual} annual (daily-compounded)"
     )
     add(
-            f"- Costs: fee {run.settings.cost.fee_rate} + slippage {run.settings.cost.slippage_rate} per fill notional"
+        f"- Costs: fee {run.settings.cost.fee_rate} + slippage {run.settings.cost.slippage_rate} per fill notional"
     )
     add(
-            f"- Determinism: code `{run.code_version}` · spec `{run.spec_digest}` · config `{run.config_digest}`"
+        f"- Determinism: code `{run.code_version}` · spec `{run.spec_digest}` · config `{run.config_digest}`"
     )
     add("")
     add("## Momentum composite vs benchmarks")
@@ -227,7 +227,7 @@ def render_markdown(run: BacktestRun) -> str:
             continue
         m = benchmark.metrics
         add(
-                f"| {key} | {_pct(m.get('total_return'))} | {_pct(m.get('cagr'))} | {_num(m.get('sharpe'))} | {_pct(m.get('max_drawdown'))} | ${_money(m.get('final_equity'))} |"
+            f"| {key} | {_pct(m.get('total_return'))} | {_pct(m.get('cagr'))} | {_num(m.get('sharpe'))} | {_pct(m.get('max_drawdown'))} | ${_money(m.get('final_equity'))} |"
         )
     add("")
     add("## Per-instrument books (walk-forward pooled)")
@@ -237,7 +237,7 @@ def render_markdown(run: BacktestRun) -> str:
     for book in run.books:
         m = book.metrics
         add(
-                f"| {book.instrument_id} | {_pct(m.get('total_return'))} | {_pct(m.get('cagr'))} | {_num(m.get('sharpe'))} | {_pct(m.get('max_drawdown'))} | {book.data_gaps} | ${_money(book.cost_paid)} |"
+            f"| {book.instrument_id} | {_pct(m.get('total_return'))} | {_pct(m.get('cagr'))} | {_num(m.get('sharpe'))} | {_pct(m.get('max_drawdown'))} | {book.data_gaps} | ${_money(book.cost_paid)} |"
         )
     add("")
     add("## Walk-forward folds")
@@ -257,7 +257,7 @@ def render_markdown(run: BacktestRun) -> str:
             )
             score = _num(fold.train_score) if fold.train_score.is_finite() else "n/a"
             add(
-                    f"| {fold.fold_index} | {train} | {fold.test_start} .. {fold.test_end} | {fold.chosen_rule.describe()} | {score}"
+                f"| {fold.fold_index} | {train} | {fold.test_start} .. {fold.test_end} | {fold.chosen_rule.describe()} | {score}"
                 f"| {_pct(fold.metrics.get('total_return'))} | {_num(fold.metrics.get('sharpe'))} |"
             )
         add("")
@@ -316,9 +316,9 @@ def render_svg(run: BacktestRun, width: int = 900, height: int = 420) -> str:
 
     colors = {"momentum-composite": "#1d4ed8", "passive-composite": "#b45309", "cash": "#6b7280"}
     parts = [
-            f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>"
+        f"<svg xmlns='http://www.w3.org/2000/svg' width='{width}' height='{height}' viewBox='0 0 {width} {height}'>"
         f"<rect width='{width}' height='{height}' fill='white'/>",
-            f"<text x='{left}' y='14' font-family='sans-serif' font-size='12' fill='#111'>{run.backtest_id} — normalized equity (log scale) · {run.data_source} data</text>"
+        f"<text x='{left}' y='14' font-family='sans-serif' font-size='12' fill='#111'>{run.backtest_id} — normalized equity (log scale) · {run.data_source} data</text>",
     ]
     # y-axis gridlines (2x, 1x, 0.5x)
     for label, factor in (("2.0x", 2.0), ("1.0x", 1.0), ("0.5x", 0.5)):
@@ -326,36 +326,36 @@ def render_svg(run: BacktestRun, width: int = 900, height: int = 420) -> str:
         if min_log <= log_v <= max_log:
             gy = y(Decimal(str(factor)))
             parts.append(
-                    f"<line x1='{left}' y1='{gy:.1f}' x2='{width - right}' y2='{gy:.1f}' stroke='#e5e7eb'/>"
+                f"<line x1='{left}' y1='{gy:.1f}' x2='{width - right}' y2='{gy:.1f}' stroke='#e5e7eb'/>"
             )
             parts.append(
-                    f"<text x='{left - 8}' y='{gy + 4:.1f}' font-family='sans-serif' font-size='10' fill='#6b7280' text-anchor='end'>{label}</text>"
+                f"<text x='{left - 8}' y='{gy + 4:.1f}' font-family='sans-serif' font-size='10' fill='#6b7280' text-anchor='end'>{label}</text>"
             )
     for key in sorted(series):
         points = " ".join(f"{x(s):.1f},{y(v):.1f}" for s, v in series[key])
         parts.append(
-                f"<polyline points='{points}' fill='none' stroke='{colors.get(key, '#111')}' stroke-width='1.6'/>"
+            f"<polyline points='{points}' fill='none' stroke='{colors.get(key, '#111')}' stroke-width='1.6'/>"
         )
     x0, x1 = x(s0), x(s1)
     parts.append(
         f"<line x1='{x0:.1f}' y1='{bottom}' x2='{x1:.1f}' y2='{bottom}' stroke='#9ca3af'/>"
     )
     parts.append(
-            f"<text x='{x0:.1f}' y='{height - 8}' font-family='sans-serif' font-size='10' fill='#6b7280'>{s0}</text>"
+        f"<text x='{x0:.1f}' y='{height - 8}' font-family='sans-serif' font-size='10' fill='#6b7280'>{s0}</text>"
     )
     parts.append(
-            f"<text x='{x1:.1f}' y='{height - 8}' font-family='sans-serif' font-size='10' fill='#6b7280' text-anchor='end'>{s1}</text>"
+        f"<text x='{x1:.1f}' y='{height - 8}' font-family='sans-serif' font-size='10' fill='#6b7280' text-anchor='end'>{s1}</text>"
     )
     legend_x = left
     for key in sorted(series):
         parts.append(
-                f"<rect x='{legend_x}' y='{height - 24}' width='10' height='3' fill='{colors.get(key, '#111')}'/>"
+            f"<rect x='{legend_x}' y='{height - 24}' width='10' height='3' fill='{colors.get(key, '#111')}'/>"
         )
         label = key.replace("momentum-composite", "momentum").replace(
             "passive-composite", "passive"
         )
         parts.append(
-                f"<text x='{legend_x + 13}' y='{height - 20}' font-family='sans-serif' font-size='10' fill='#374151'>{label}</text>"
+            f"<text x='{legend_x + 13}' y='{height - 20}' font-family='sans-serif' font-size='10' fill='#374151'>{label}</text>"
         )
         legend_x += 13 + len(label) * 6 + 18
     parts.append("</svg>")

@@ -28,6 +28,8 @@ Security (build plan sections 6 and 20):
 from __future__ import annotations
 
 import json
+import re
+
 from httpx import Client as HttpxClient
 from httpx import HTTPError, ReadTimeout
 
@@ -36,7 +38,7 @@ from ..contracts.broker import (
     BrokerStateNotAvailable,
     BrokerUnavailable,
 )
-from .credentials import TokenStore
+from ..security.loopback import require_official_broker_url
 
 PROTOCOL_VERSION = "2025-03-26"
 CLIENT_INFO = {"name": "trading-agent", "version": "0.4.0"}
@@ -54,6 +56,7 @@ class McpClient:
         timeout_seconds: float = 10.0,
         http: HttpxClient | None = None,
     ) -> None:
+        require_official_broker_url(base_url)
         self._base_url = base_url
         self._token = token
         self._timeout = timeout_seconds
@@ -69,7 +72,7 @@ class McpClient:
     def connected(self) -> bool:
         return self._connected
 
-    def __enter__(self) -> "McpClient":
+    def __enter__(self) -> McpClient:
         return self
 
     def __exit__(self, *exc_info: object) -> None:
@@ -87,11 +90,14 @@ class McpClient:
 
     def initialize(self) -> dict:
         """Perform the protocol handshake; raises a classified BrokerError."""
-        result = self._rpc("initialize", {
-            "protocolVersion": PROTOCOL_VERSION,
-            "capabilities": {},
-            "clientInfo": CLIENT_INFO,
-        })
+        result = self._rpc(
+            "initialize",
+            {
+                "protocolVersion": PROTOCOL_VERSION,
+                "capabilities": {},
+                "clientInfo": CLIENT_INFO,
+            },
+        )
         self._connected = True
         self._notify("notifications/initialized", {})
         return result or {}
@@ -114,10 +120,16 @@ class McpClient:
         """
         if not self._connected:
             raise BrokerUnavailable("session not initialized")
-        if permitted is not None and name not in permitted:
-            raise BrokerExecutionDenied(
-                f"tool '{name}' is not in the permitted read set"
+        if (
+            not permitted
+            or name not in permitted
+            or not name.startswith(("get_", "list_", "read_", "fetch_"))
+            or re.search(
+                r"(?:^|_)(place|cancel|submit|transfer|withdraw|create|delete|modify|update)(?:_|$)",
+                name,
             )
+        ):
+            raise BrokerExecutionDenied(f"tool '{name}' is not in the permitted read set")
         result = self._rpc("tools/call", {"name": name, "arguments": arguments})
         if result is None:
             raise BrokerStateNotAvailable(f"tool '{name}' returned no result")
@@ -133,6 +145,7 @@ class McpClient:
         return self._post(body, expect_result=True)
 
     def _post(self, body: dict, *, expect_result: bool) -> dict | None:
+        require_official_broker_url(self._base_url)
         headers = {
             "Content-Type": "application/json",
             "Accept": ACCEPT,
@@ -141,11 +154,16 @@ class McpClient:
         if self._session_id is not None:
             headers["MCP-Session-Id"] = self._session_id
         try:
-            response = self._http.post(self._base_url, json=body, headers=headers)
+            response = self._http.post(
+                self._base_url,
+                json=body,
+                headers=headers,
+                follow_redirects=False,
+                timeout=self._timeout,
+            )
         except ReadTimeout as error:
             raise BrokerUnavailable(
-                f"broker MCP request to {self._base_url} timed out after "
-                f"{self._timeout:.0f}s"
+                f"broker MCP request to {self._base_url} timed out after {self._timeout:.0f}s"
             ) from error
         except HTTPError as error:
             raise BrokerUnavailable(
@@ -161,36 +179,35 @@ class McpClient:
                 f"broker MCP rejected authentication (HTTP {response.status_code}); "
                 "re-run 'trading-agent broker setup'"
             )
-        if response.status_code >= 400:
-            raise BrokerUnavailable(
-                f"broker MCP endpoint returned HTTP {response.status_code}"
-            )
+        if response.status_code < 200 or response.status_code >= 300:
+            raise BrokerUnavailable(f"broker MCP endpoint returned HTTP {response.status_code}")
 
         if not expect_result:
             return None
 
-        payload = self._parse_body(response)
+        payload = self._parse_body(response, expected_id=body.get("id"))
         if payload is None:
-            raise BrokerStateNotAvailable(
-                "broker MCP returned an empty response body"
-            )
+            raise BrokerStateNotAvailable("broker MCP returned an empty response body")
+        if (
+            not isinstance(payload, dict)
+            or payload.get("jsonrpc") != "2.0"
+            or type(payload.get("id")) is not type(body.get("id"))
+            or payload.get("id") != body.get("id")
+        ):
+            raise BrokerStateNotAvailable("broker MCP response identity mismatch")
         if "error" in payload:
-            error = payload.get("error") or {}
-            message = str(error.get("message", "unclassified RPC error"))
-            message = TokenStore.redact(message, self._token)
-            code = error.get("code", "unknown")
-            raise BrokerStateNotAvailable(f"broker MCP RPC error {code}: {message[:200]}")
+            raise BrokerStateNotAvailable("broker MCP returned a classified RPC error")
         return payload.get("result")
 
     @staticmethod
-    def _parse_body(response) -> dict | None:
+    def _parse_body(response, expected_id=None) -> dict | None:
         """Parse an application/json or text/event-stream response body."""
         content_type = response.headers.get("content-type", "")
         text = response.text
         if not text.strip():
             return None
         if "text/event-stream" in content_type:
-            return _parse_sse(text)
+            return _parse_sse(text, expected_id)
         try:
             return json.loads(text)
         except ValueError:
@@ -203,18 +220,22 @@ class McpClient:
                 ) from error
 
 
-def _parse_sse(text: str) -> dict | None:
-    """Return the JSON object of the last ``data:`` line in an SSE stream."""
-    last_data: str | None = None
-    for line in text.splitlines():
-        if line.startswith("data:"):
-            last_data = line[len("data:"):].strip()
-    if last_data is None:
-        return None
-    try:
-        return json.loads(last_data)
-    except ValueError:
-        return None
+def _parse_sse(text: str, expected_id=None) -> dict | None:
+    for event in text.replace("\r\n", "\n").split("\n\n"):
+        data = "\n".join(
+            line[5:].lstrip() for line in event.splitlines() if line.startswith("data:")
+        )
+        try:
+            message = json.loads(data)
+        except ValueError:
+            continue
+        if (
+            isinstance(message, dict)
+            and type(message.get("id")) is type(expected_id)
+            and message.get("id") == expected_id
+        ):
+            return message
+    return None
 
 
 def _extract_tool_text(result: dict) -> str:
@@ -244,5 +265,3 @@ def parse_tool_payload(result: dict):
         return json.loads(text)
     except ValueError:
         return None
-
-

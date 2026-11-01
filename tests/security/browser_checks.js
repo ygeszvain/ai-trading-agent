@@ -1,0 +1,37 @@
+async page => {
+  const errors = [], requests = [];
+  page.on('pageerror', e => errors.push(e.message));
+  page.on('request', r => requests.push(new URL(r.url()).origin));
+  const check = (ok, reason) => { if (!ok) throw new Error(reason); };
+  await page.getByRole('link', {name:'Portfolio', exact:true}).click();
+  await page.getByText('$123,456,789.12345678', {exact:true}).waitFor();
+  check(new URL(page.url()).searchParams.get('run_id') === 'review-run', 'run scope lost');
+  check(await page.getByText('missing-mark', {exact:true}).isVisible(), 'missing mark hidden');
+  await page.screenshot({path:'output/playwright/security-review/portfolio.png', fullPage:true});
+  await page.getByRole('link', {name:'Orders', exact:true}).click();
+  await page.getByRole('link', {name:'order-good', exact:true}).click();
+  await page.getByText('unknown', {exact:true}).waitFor();
+  check((await page.locator('[data-order-fills] tbody tr').count()) === 2, 'partial fills lost');
+  check((await page.locator('[data-order] pre').first().textContent()).includes('<script>fixture-injection</script>'), 'evidence lost');
+  check((await page.locator('[data-order] script').count()) === 0, 'injected evidence became executable markup');
+  await page.screenshot({path:'output/playwright/security-review/order.png', fullPage:true});
+  await page.getByRole('link', {name:'Activity', exact:true}).click();
+  await page.getByText('fill_corrected', {exact:true}).waitFor();
+  check((await page.locator('[data-activity] img').count()) === 0, 'activity injected markup');
+  check((await page.locator('[data-activity] tbody tr').count()) === 4, 'HOLD/cancel/rejection/correction lost');
+  await page.goto('http://127.0.0.1:8020/instruments/TEST_A?run_id=review-run');
+  await page.locator('[data-prices] tbody tr').first().waitFor();
+  check((await page.locator('[data-prices] tbody tr').count()) === 3, 'missing session not preserved');
+  await page.setViewportSize({width:390, height:844});
+  await page.screenshot({path:'output/playwright/security-review/instrument-mobile.png', fullPage:true});
+  await page.route('**/api/v1/positions**', route => route.abort());
+  await page.goto('http://127.0.0.1:8020/portfolio?run_id=review-run');
+  await page.getByRole('alert').waitFor();
+  check((await page.getByRole('alert').textContent()).includes('Read unavailable'), 'network failure hidden');
+  await page.unroute('**/api/v1/positions**');
+  await page.getByRole('button', {name:'Logout', exact:true}).click();
+  await page.getByRole('textbox', {name:'Owner token'}).waitFor();
+  check(errors.length===0, JSON.stringify(errors));
+  check(requests.every(x=>x==='http://127.0.0.1:8020'), 'browser contacted external origin');
+  console.log(JSON.stringify({result:'CODE_PASS', checks:['exact money','missing mark','run navigation','unknown order','two partial fills','escaped evidence','HOLD/reject/cancel/correction','session gap','narrow viewport','network unavailable','logout'], pageErrors:errors.length, externalOrigins:0}));
+}

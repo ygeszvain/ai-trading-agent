@@ -260,6 +260,8 @@ class SimulatorBrokerAdapter(BrokerAdapter):
         return None
 
     def cancel_order(self, broker_order_id: str) -> OrderResult:
+        if is_live_mode(self._config.app.mode):
+            raise BrokerExecutionNotAvailable("simulator cancellation denied in live mode")
         if not self.bound:
             raise BrokerExecutionNotAvailable(
                 f"simulator cancellation rejected: no run context bound; "

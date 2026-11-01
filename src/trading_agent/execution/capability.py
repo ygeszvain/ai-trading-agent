@@ -52,7 +52,7 @@ class ToolSchema:
     input_schema: dict
 
     @classmethod
-    def from_api(cls, raw: dict) -> "ToolSchema":
+    def from_api(cls, raw: dict) -> ToolSchema:
         return cls(
             name=str(raw.get("name", "")),
             description=str(raw.get("description", "")),
@@ -95,6 +95,8 @@ def verify_capability(tools: list[ToolSchema], allowlisted_digest: str | None) -
     A missing allowlisted digest is a mismatch (fail-closed): the owner must
     run ``broker setup`` and record the verified digest before reads proceed.
     """
+    if len({tool.name for tool in tools}) != len(tools):
+        return CapabilityReport(verified=False, mismatch_detail="duplicate tool names")
     digest = canonical_digest(tools)
     if not allowlisted_digest:
         return CapabilityReport(
@@ -134,7 +136,7 @@ class ToolAllowlist:
         self._version = version
 
     @classmethod
-    def from_file(cls, path: str | Path) -> "ToolAllowlist | None":
+    def from_file(cls, path: str | Path) -> ToolAllowlist | None:
         """Load the allowlist, or None when the file does not exist.
 
         Construction must never crash on a missing file: the shadow cycle
@@ -149,7 +151,7 @@ class ToolAllowlist:
         return cls.from_dict(raw, source=str(path))
 
     @classmethod
-    def from_dict(cls, raw: dict, *, source: str = "<dict>") -> "ToolAllowlist":
+    def from_dict(cls, raw: dict, *, source: str = "<dict>") -> ToolAllowlist:
         tools = raw.get("tools") or {}
         if not isinstance(tools, dict):
             raise CapabilityMismatch(f"allowlist 'tools' must be a mapping ({source})")
@@ -194,16 +196,12 @@ class ToolAllowlist:
         return {
             spec.name
             for spec in self._roles.values()
-            if spec.name is not None and spec.category == "read"
+            if spec.role in READ_ROLES and spec.name is not None and spec.category == "read"
         }
 
     def permits(self, tool_name: str, *, required_category: str) -> bool:
         spec = self.role_for(tool_name)
-        return (
-            spec is not None
-            and spec.category == required_category
-            and spec.name is not None
-        )
+        return spec is not None and spec.category == required_category and spec.name is not None
 
     def to_dict(self) -> dict:
         return {

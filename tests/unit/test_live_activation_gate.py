@@ -131,7 +131,7 @@ def test_gate_rejects_even_a_hypothetical_verified_gateway_in_m0() -> None:
     decision = evaluate_live_activation(config, _VerifiedBroker(), now=NOW)
     assert decision.authorized is False
     names = {check.name for check in decision.unmet}
-    assert names == {"reconciliation_healthy", "strategy_active"}
+    assert names == {"reconciliation_healthy", "strategy_active", "build_live_dispatch_disabled"}
 
 
 def test_expired_authorization_is_unmet() -> None:

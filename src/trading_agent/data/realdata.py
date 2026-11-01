@@ -25,19 +25,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 import urllib.error
 import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from ..config.models import DataSettings, SourceRefreshSpec, SourceSpec, TradingConfig
+from ..config.models import SourceSpec, TradingConfig
 from ..contracts.market import Instrument, MarketBar, QualityFlag, Quote
-from ..exceptions import ConfigError
 from .provider import MarketDataProvider, SessionClose
 
 # Series-level metadata. Only the asset class is asserted from the registry;
@@ -127,13 +127,28 @@ class RealSymbolData:
     content_digest: str | None = None
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        raise urllib.error.HTTPError(req.full_url, code, "redirect denied", headers, fp)
+
+
 def default_http_get(url: str, timeout: float) -> tuple[int, bytes]:
+    parsed = urllib.parse.urlparse(url)
+    if (
+        parsed.scheme != "https"
+        or parsed.netloc != "api.stlouisfed.org"
+        or parsed.path != "/fred/series/observations"
+        or parsed.fragment
+    ):
+        raise ValueError("unapproved data endpoint")
     request = urllib.request.Request(url, method="GET")
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            return response.status, response.read()
+        with urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect()).open(
+            request, timeout=timeout
+        ) as response:
+            return response.status, response.read(8_000_001)
     except urllib.error.HTTPError as error:
-        return error.code, error.read() or b""
+        return error.code, b""
 
 
 class RealDataCache:
@@ -143,6 +158,12 @@ class RealDataCache:
         self._root = Path(root)
 
     def _path(self, source_id: str, symbol: str) -> Path:
+        if (
+            not re.fullmatch(r"[A-Za-z0-9_-]{1,64}", source_id)
+            or not re.fullmatch(r"[A-Za-z0-9_.:^_-]{1,64}", symbol)
+            or symbol in {".", ".."}
+        ):
+            raise ValueError("invalid data cache identity")
         return self._root / source_id / f"{symbol}.json"
 
     def load(self, source_id: str, symbol: str) -> RealSymbolData | None:
@@ -151,10 +172,7 @@ class RealDataCache:
             return None
         try:
             payload = json.loads(path.read_text())
-            observations = {
-                row["date"]: Decimal(row["close"])
-                for row in payload["observations"]
-            }
+            observations = {row["date"]: Decimal(row["close"]) for row in payload["observations"]}
             fetched_at = datetime.fromisoformat(payload["fetched_at"])
             return RealSymbolData(
                 source_id=source_id,
@@ -164,7 +182,7 @@ class RealDataCache:
                 fetched_at=fetched_at,
                 content_digest=payload.get("content_digest"),
             )
-        except (OSError, ValueError, KeyError) as error:
+        except (OSError, ValueError, KeyError):
             return None
 
     def save(self, data: RealSymbolData) -> None:
@@ -174,7 +192,7 @@ class RealDataCache:
             "source_id": data.source_id,
             "symbol": data.symbol,
             "asset_class": data.asset_class,
-            "fetched_at": (data.fetched_at or datetime.now(timezone.utc)).isoformat(),
+            "fetched_at": (data.fetched_at or datetime.now(UTC)).isoformat(),
             "content_digest": content_digest(data.symbol, list(data.observations.items())),
             "observations": [
                 {"date": obs_date.isoformat(), "close": format(value.normalize(), "f")}
@@ -247,8 +265,15 @@ def fetch_symbol(
     corrections are preserved and the new content digest recorded.
     """
     if spec.id != "fred":
-        return SymbolFetch(spec.id, symbol, "no_adapter", detail="no fetch adapter registered for this source in M3")
+        return SymbolFetch(
+            spec.id,
+            symbol,
+            "no_adapter",
+            detail="no fetch adapter registered for this source in M3",
+        )
     api_base = spec.api_base_url or FRED_DEFAULT_API_BASE
+    if api_base != FRED_DEFAULT_API_BASE:
+        return SymbolFetch(spec.id, symbol, "invalid", detail="unapproved data origin")
     if not api_key:
         env_name = spec.api_key_env or "FRED_API_KEY"
         return SymbolFetch(
@@ -260,11 +285,17 @@ def fetch_symbol(
 
     cached = cache.load(spec.id, symbol)
     rows = (
-        [(obs_date, value) for obs_date, value in sorted(cached.observations.items()) if start <= obs_date <= end]
+        [
+            (obs_date, value)
+            for obs_date, value in sorted(cached.observations.items())
+            if start <= obs_date <= end
+        ]
         if cached
         else []
     )
-    max_age = timedelta(minutes=spec.refresh.max_age_minutes) if spec.refresh.max_age_minutes else None
+    max_age = (
+        timedelta(minutes=spec.refresh.max_age_minutes) if spec.refresh.max_age_minutes else None
+    )
     fresh = (
         cached is not None
         and cached.fetched_at is not None
@@ -287,15 +318,22 @@ def fetch_symbol(
     try:
         status_code, body = http_get(url, timeout=30.0)
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
-        return SymbolFetch(spec.id, symbol, "unreachable", detail=f"{error.__class__.__name__}: {error}")
+        return SymbolFetch(
+            spec.id,
+            symbol,
+            "unreachable",
+            detail=f"classified network failure: {error.__class__.__name__}",
+        )
     if status_code == 400 and b"API Key" in body or status_code in (401, 403):
-        return SymbolFetch(spec.id, symbol, "auth_failed", detail=f"FRED rejected the API key (HTTP {status_code})")
+        return SymbolFetch(
+            spec.id, symbol, "auth_failed", detail=f"FRED rejected the API key (HTTP {status_code})"
+        )
     if status_code != 200:
         return SymbolFetch(spec.id, symbol, "unreachable", detail=f"HTTP {status_code}")
     try:
         fetched = _parse_fred_csv(body, symbol)
-    except (ValueError, ArithmeticError) as error:
-        return SymbolFetch(spec.id, symbol, "parse_failed", detail=str(error))
+    except (ValueError, ArithmeticError):
+        return SymbolFetch(spec.id, symbol, "parse_failed", detail="invalid provider payload")
 
     merged = dict(cached.observations) if cached else {}
     merged.update(dict(fetched))
@@ -340,7 +378,10 @@ def fetch_source(
 ) -> SourceFetchResult:
     if not spec.enabled or not spec.symbols:
         return SourceFetchResult(spec.id, spec.enabled, tuple(spec.symbols))
-    results = [fetch_symbol(spec, symbol, cache, start, end, api_key=api_key, now=now, http_get=http_get) for symbol in spec.symbols]
+    results = [
+        fetch_symbol(spec, symbol, cache, start, end, api_key=api_key, now=now, http_get=http_get)
+        for symbol in spec.symbols
+    ]
     snapshot_id = None
     if all(result.status in {"ok", "cached"} for result in results):
         digest = _sha256_hex("".join((result.content_digest or "") for result in results))[:16]
@@ -378,17 +419,22 @@ class RealMarketProvider(MarketDataProvider):
             item.symbol: dict(item.observations) for item in data
         }
         self._symbols = sorted(self._closes)
-        self._sessions = sorted({obs_date for closes in self._closes.values() for obs_date in closes})
+        self._sessions = sorted(
+            {obs_date for closes in self._closes.values() for obs_date in closes}
+        )
         self._session_index = {session: index for index, session in enumerate(self._sessions)}
-        self._snapshot_id = "realdata-" + _sha256_hex(
-            json.dumps(
-                {
-                    symbol: content_digest(symbol, sorted(closes.items()))
-                    for symbol, closes in sorted(self._closes.items())
-                },
-                sort_keys=True,
-            )
-        )[:16]
+        self._snapshot_id = (
+            "realdata-"
+            + _sha256_hex(
+                json.dumps(
+                    {
+                        symbol: content_digest(symbol, sorted(closes.items()))
+                        for symbol, closes in sorted(self._closes.items())
+                    },
+                    sort_keys=True,
+                )
+            )[:16]
+        )
         self._instruments = tuple(
             Instrument(
                 instrument_id=f"{source_id}:{symbol}",
@@ -581,9 +627,7 @@ def run_quality_checks(
         for instrument in provider.instruments():
             closes = dict()
             for session in all_sessions:
-                window = provider.recent_session_closes(
-                    instrument.instrument_id, session, 1
-                )
+                window = provider.recent_session_closes(instrument.instrument_id, session, 1)
                 if window:
                     closes[session] = window[-1]
             observed = set(closes)

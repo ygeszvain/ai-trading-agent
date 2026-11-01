@@ -111,7 +111,13 @@ Optional connectivity check if `psql` is installed:
 psql -h 127.0.0.1 -p 5433 -U trading_agent -d trading_agent -c 'SELECT 1;'
 ```
 
-Start the website:
+**Current startup blocker:** Prompt 10 found that Alembic head lacks required
+columns/tables. `serve` now stops with a schema compatibility error. A reviewed
+migration is required; do not bypass the guard or point at another project
+database. Core browser acceptance used the isolated synthetic harness documented
+in [the security review](docs/security_readiness_review.md).
+
+After resolving that blocker, start the website:
 
 ```bash
 uv run trading-agent serve
@@ -119,9 +125,9 @@ uv run trading-agent serve
 
 Startup applies migrations, bootstraps a per-installation owner token, and serves
 `http://127.0.0.1:8000/auth/login`. Use that exact hostname so Host/Origin and
-cookie checks agree. The first startup prints the login token locally. Keep it
-private. It is stored with mode `0600` in `~/.trading-agent/webauth.json` outside
-the repository. `TRADING_AGENT_WEB_AUTH_FILE` can select another protected path;
+cookie checks agree. Startup prints the protected file path, never its token.
+Retrieve the token locally for the login form and keep it private. It is stored
+with mode `0600` in `~/.trading-agent/webauth.json` outside the repository. `TRADING_AGENT_WEB_AUTH_FILE` can select another protected path;
 do not point it at a tracked file. Never paste the file or token into chat.
 
 On subsequent starts, use your saved token. If lost, stop the server, remove only
@@ -132,8 +138,9 @@ Changing `web.token` in YAML does not configure this server's authentication;
 
 Change the port with `uv run trading-agent serve --port 8001`. Bind only to
 `127.0.0.1` or `localhost`. Use Ctrl-C to stop the server. Page reads query stored
-state; file-based backtests do not seed the website database. A fresh database
-may show empty data or incomplete-page errors in this snapshot.
+state; file-based backtests do not seed the website database. An incompatible
+database stops before serving; a compatible empty database returns unavailable
+data rather than invented amounts.
 
 The persisted simulation API is `TradingPipeline(config).run()` in
 `src/trading_agent/engine/pipeline.py`. It is not exposed as a current CLI `demo`
@@ -181,7 +188,9 @@ AttributeError, and provider protocols, series identities, point-in-time rights,
 and cache behavior need review before use. Do not enable a provider, purchase a
 feed, or redistribute data based on this snapshot.
 
-Gateway scaffolding is not an authenticated broker integration. This publication
+Gateway scaffolding is not an authenticated broker integration. The unvalidated
+real gateway and legacy OAuth paths are quarantined; setting shadow/live flags
+cannot activate them. Live dispatch remains unconditionally denied. This publication
 performs no financial-account authentication, account setup, orders, cancellations,
 transfers, or activation. Credentials belong in a separately controlled runtime
 only after the corresponding integration/security milestones and owner decisions.
@@ -196,7 +205,8 @@ only after the corresponding integration/security milestones and owner decisions
 | Configuration error | Read each validation message; compare your ignored local profile with the default. Do not enable live settings to bypass it. |
 | Database unreachable | Check `docker compose ps`, port 5433, and `app.db_url`; do not use another project's database. |
 | Website refuses Host or Origin | Open the configured loopback URL with the correct port, not a LAN address or proxy. |
-| Blank/incomplete website | File reports do not populate database runs; website seeding/acceptance remains pending. |
+| Schema compatibility failure | Stop; use the missing-table/column list for a reviewed migration. Do not bypass validation. |
+| Empty website | File reports do not populate database runs; use only the dedicated synthetic fixture for review. |
 | Test, lint, or type failures | Compare with the publication baseline and report a sanitized reproducer. |
 
 For a bug report, include the commit, Python/uv versions, exact command, synthetic

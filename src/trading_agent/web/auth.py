@@ -3,7 +3,7 @@
 Design rules (all enforced here, never in the templates):
 
 - The owner token lives in a protected local file (``chmod 600``) outside the
-  repository. The first ``serve`` bootstraps it and prints it once; a shared
+  repository. The first ``serve`` bootstraps it without printing it; a shared
   default password is never shipped and bootstrap secrets never enter source
   control.
 - Sessions are HMAC-SHA256 signed cookies with a 12 hour expiry. The cookie
@@ -34,6 +34,7 @@ from sqlalchemy.orm import Session
 from ..config.models import TradingConfig
 from ..db.schema import web_auth, web_sessions
 from ..exceptions import TradingAgentError
+from ..security.files import read_private_json, write_private_json
 
 SESSION_COOKIE = "ta_session"
 SESSION_TTL = timedelta(hours=12)
@@ -69,16 +70,11 @@ def ensure_bootstrap(path: Path | None = None) -> tuple[Path, bool]:
     Returns ``(path, created)``.
     """
     target = path if path is not None else resolve_auth_path()
-    if target.exists():
-        return target, False
-    target.parent.mkdir(parents=True, exist_ok=True)
     payload = {
         "token": secrets.token_urlsafe(24),
         "session_secret": secrets.token_urlsafe(32),
     }
-    target.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
-    target.chmod(0o600)
-    return target, True
+    return target, write_private_json(target, payload, replace=False)
 
 
 def load_store(path: Path | None = None) -> AuthStore:
@@ -86,9 +82,11 @@ def load_store(path: Path | None = None) -> AuthStore:
     if not target.exists():
         raise AuthError(f"owner token file missing at {target}; run serve first to bootstrap")
     try:
-        payload = json.loads(target.read_text(encoding="utf-8"))
-        token = str(payload["token"])
-        secret = str(payload["session_secret"])
+        payload = read_private_json(target)
+        token = payload["token"]
+        secret = payload["session_secret"]
+        if not isinstance(token, str) or not isinstance(secret, str):
+            raise ValueError("private auth fields must be strings")
     except (OSError, ValueError, KeyError, TypeError) as error:
         raise AuthError(f"owner token file {target} is unreadable or malformed") from error
     if not token or not secret:
@@ -108,7 +106,11 @@ def issue_session(store: AuthStore, now: datetime | None = None) -> str:
     """Mint a signed session cookie value for the owner."""
     timestamp = now if now is not None else datetime.now(UTC)
     payload = json.dumps(
-        {"sub": "owner", "exp": (timestamp + SESSION_TTL).isoformat()},
+        {
+            "sub": "owner",
+            "sid": secrets.token_urlsafe(16),
+            "exp": (timestamp + SESSION_TTL).isoformat(),
+        },
         separators=(",", ":"),
         sort_keys=True,
     ).encode("utf-8")
@@ -118,7 +120,7 @@ def issue_session(store: AuthStore, now: datetime | None = None) -> str:
 
 def verify_session(store: AuthStore, cookie: str | None, now: datetime | None = None) -> bool:
     """Verify a session cookie: structure, HMAC, subject, and expiry."""
-    if not cookie or cookie.count(".") != 1:
+    if not cookie or len(cookie) > 2048 or cookie.count(".") != 1:
         return False
     payload_part, signature_part = cookie.split(".", 1)
     try:
@@ -135,6 +137,10 @@ def verify_session(store: AuthStore, cookie: str | None, now: datetime | None = 
         return False
     try:
         document = json.loads(body.decode("utf-8"))
+        if not isinstance(document, dict) or set(document) != {"sub", "sid", "exp"}:
+            return False
+        if not isinstance(document["sid"], str) or not document["sid"]:
+            return False
         expires = datetime.fromisoformat(str(document.get("exp")))
     except ValueError:
         return False
@@ -145,15 +151,28 @@ def verify_session(store: AuthStore, cookie: str | None, now: datetime | None = 
 
 
 def expected_origin(config: TradingConfig) -> str:
-    return f"http://{config.app.web_host}:{config.app.web_port}"
+    host = f"[{config.app.web_host}]" if ":" in config.app.web_host else config.app.web_host
+    return f"http://{host}:{config.app.web_port}"
 
 
 def host_matches(config: TradingConfig, host_header: str | None) -> bool:
     """Host header (hostname part) must equal the configured loopback bind."""
     if host_header is None:
         return False
-    hostname = host_header.split(":", 1)[0].lower()
-    return hostname == config.app.web_host.lower()
+    return host_header.lower() == expected_origin(config).split("://", 1)[1].lower()
+
+
+def session_registered(session: Session, cookie: str, *, now: datetime | None = None) -> bool:
+    timestamp = now or datetime.now(UTC)
+    return (
+        session.execute(
+            select(web_sessions.c.session_sha256).where(
+                web_sessions.c.session_sha256 == _sha256(cookie),
+                web_sessions.c.expires_at > timestamp,
+            )
+        ).first()
+        is not None
+    )
 
 
 def record_login(session: Session, store: AuthStore, cookie: str, at: datetime) -> None:

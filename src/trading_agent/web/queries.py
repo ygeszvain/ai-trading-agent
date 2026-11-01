@@ -38,9 +38,10 @@ from ..db.schema import (
     runs,
     submission_attempts,
 )
-from ..engine.pipeline import CASH_BOOK, PASSIVE_BOOK, STRATEGY_BOOK
+from ..engine.pipeline import ACCOUNT_ALIAS, CASH_BOOK, PASSIVE_BOOK, STRATEGY_BOOK
 from ..engine.report import _session_gap
 from ..money import round_money
+from ..security.exports import redacted_evidence
 
 BOOK_LABELS = {
     STRATEGY_BOOK: "Strategy (trend-momentum)",
@@ -52,10 +53,15 @@ BOOK_LABELS = {
 def _money(value: Any) -> str | None:
     if value is None:
         return None
-    return str(value.normalize()) if isinstance(value, Decimal) else str(value)
+    return format(value, "f") if isinstance(value, Decimal) else str(value)
 
 
 def _iso(value: Any) -> str | None:
+    if isinstance(value, str):
+        try:
+            return datetime.fromisoformat(value).isoformat()
+        except ValueError:
+            return None
     if value is None or not hasattr(value, "isoformat"):
         return None
     return value.isoformat()
@@ -64,7 +70,7 @@ def _iso(value: Any) -> str | None:
 def _scope(config: TradingConfig, run: Any | None) -> dict[str, str | None]:
     return {
         "account_alias": run.account_alias if run is not None else None,
-        "mode": (run.mode if run is not None else None) and str(run.mode).upper(),
+        "mode": str(run.mode).upper() if run is not None else None,
         "run_id": run.run_id if run is not None else None,
         "strategy_version": run.strategy_version if run is not None else None,
     }
@@ -96,22 +102,41 @@ def _envelope(
             "data_snapshot_id": run.data_snapshot_id if run is not None else None,
             "ledger": "persisted ledger_events (authoritative)",
         },
-        "quality_flags": quality_flags or [],
+        "quality_flags": sorted(
+            set(
+                (quality_flags or [])
+                + (
+                    ["historical-simulation"]
+                    if run is not None and run.data_source == "synthetic"
+                    else []
+                )
+            )
+        ),
         "pagination": pagination or {},
         "payload": payload,
     }
 
 
-def resolve_run(session: Session, run_id: str | None) -> Any | None:
-    if run_id is None:
-        return session.execute(
-            select(runs).order_by(runs.c.created_at.desc()).limit(1)
-        ).scalar_one_or_none()
-    return session.execute(select(runs).where(runs.c.run_id == run_id)).scalar_one_or_none()
+def _run_scope(config: TradingConfig):
+    alias = (
+        ACCOUNT_ALIAS
+        if config.app.mode.value == "simulation"
+        else config.broker.approved_account_id
+    )
+    return (runs.c.mode == config.app.mode.value, runs.c.account_alias == (alias or ""))
+
+
+def resolve_run(session: Session, config: TradingConfig, run_id: str | None) -> Any | None:
+    query = select(runs).where(*_run_scope(config))
+    if run_id is not None:
+        query = query.where(runs.c.run_id == run_id)
+    return session.execute(query.order_by(runs.c.created_at.desc()).limit(1)).first()
 
 
 def list_runs(session: Session, config: TradingConfig) -> dict[str, Any]:
-    rows = session.execute(select(runs).order_by(runs.c.created_at.desc())).scalars()
+    rows = session.execute(
+        select(runs).where(*_run_scope(config)).order_by(runs.c.created_at.desc()).limit(100)
+    ).all()
     items = [
         {
             "run_id": row.run_id,
@@ -130,7 +155,7 @@ def list_runs(session: Session, config: TradingConfig) -> dict[str, Any]:
 
 
 def get_overview(session: Session, config: TradingConfig, run_id: str | None) -> dict[str, Any]:
-    run = resolve_run(session, run_id)
+    run = resolve_run(session, config, run_id)
     if run is None:
         return _envelope(
             session=session,
@@ -155,16 +180,20 @@ def get_overview(session: Session, config: TradingConfig, run_id: str | None) ->
                 .order_by(portfolio_snapshots.c.ts.desc())
                 .limit(1)
             )
-        ).scalar_one_or_none()
+        ).first()
         if row is None:
             continue
         books.append(
             {
                 "key": key,
                 "label": BOOK_LABELS.get(key, key),
-                "equity": _money(row.equity),
+                "equity": _money(row.equity)
+                if all(p.get("mark") is not None for p in (row.positions or []))
+                else None,
                 "cash": _money(row.cash),
-                "gross_exposure": _money(row.gross_exposure),
+                "gross_exposure": _money(row.gross_exposure)
+                if all(p.get("mark") is not None for p in (row.positions or []))
+                else None,
                 "reconciliation_status": row.reconciliation_status,
                 "as_of": _iso(row.ts),
             }
@@ -221,7 +250,7 @@ def get_overview(session: Session, config: TradingConfig, run_id: str | None) ->
 
 
 def get_equity_curve(session: Session, config: TradingConfig, run_id: str | None) -> dict[str, Any]:
-    run = resolve_run(session, run_id)
+    run = resolve_run(session, config, run_id)
     if run is None:
         return _envelope(
             session=session, config=config, run=None, as_of=None, payload={"series": []}
@@ -233,6 +262,7 @@ def get_equity_curve(session: Session, config: TradingConfig, run_id: str | None
                 portfolio_snapshots.c.ts,
                 portfolio_snapshots.c.equity,
                 portfolio_snapshots.c.cash,
+                portfolio_snapshots.c.positions,
             )
             .where(portfolio_snapshots.c.run_id == run.run_id)
             .order_by(portfolio_snapshots.c.ts)
@@ -243,7 +273,9 @@ def get_equity_curve(session: Session, config: TradingConfig, run_id: str | None
             "book": row.portfolio_key,
             "label": BOOK_LABELS.get(row.portfolio_key, row.portfolio_key),
             "ts": _iso(row.ts),
-            "equity": _money(row.equity),
+            "equity": _money(row.equity)
+            if not any(p.get("mark") is None for p in row.positions or [])
+            else None,
             "cash": _money(row.cash),
         }
         for row in rows
@@ -263,7 +295,7 @@ def get_equity_curve(session: Session, config: TradingConfig, run_id: str | None
 
 
 def get_health(session: Session, config: TradingConfig, run_id: str | None) -> dict[str, Any]:
-    run = resolve_run(session, run_id)
+    run = resolve_run(session, config, run_id)
     watermark = _run_watermark(session, run.run_id) if run is not None else None
     last_recon = (
         session.execute(
@@ -305,7 +337,7 @@ def get_activity(
     limit: int = 20,
 ) -> dict[str, Any]:
     limit = max(1, min(int(limit), 100))
-    run = resolve_run(session, run_id)
+    run = resolve_run(session, config, run_id)
     if run is None:
         return _envelope(
             session=session,
@@ -316,12 +348,14 @@ def get_activity(
         )
     from ..db.schema import activity_events
 
-    query = select(activity_events).where(activity_events.c.run_id == run.run_id)
+    query = select(activity_events).where(
+        activity_events.c.run_id == run.run_id,
+        activity_events.c.account_alias == run.account_alias,
+        activity_events.c.mode == run.mode,
+    )
     if cursor is not None:
         query = query.where(activity_events.c.cursor < int(cursor))
-    rows = (
-        session.execute(query.order_by(activity_events.c.cursor.desc()).limit(limit + 1))
-    ).scalars()
+    rows = (session.execute(query.order_by(activity_events.c.cursor.desc()).limit(limit + 1))).all()
     items = list(rows)
     has_more = len(items) > limit
     events = [
@@ -332,7 +366,7 @@ def get_activity(
             "origin": row.origin,
             "event_type": row.event_type,
             "correlation": row.correlation,
-            "payload": row.payload,
+            "payload": redacted_evidence(row.payload),
             "corrected_by": row.corrected_by,
         }
         for row in items[:limit]
@@ -351,7 +385,7 @@ def get_activity(
 def get_orders(
     session: Session, config: TradingConfig, run_id: str | None, status: str | None = None
 ) -> dict[str, Any]:
-    run = resolve_run(session, run_id)
+    run = resolve_run(session, config, run_id)
     if run is None:
         return _envelope(
             session=session, config=config, run=None, as_of=None, payload={"orders": []}
@@ -359,7 +393,7 @@ def get_orders(
     query = select(broker_orders).where(broker_orders.c.run_id == run.run_id)
     if status is not None:
         query = query.where(broker_orders.c.status == status)
-    rows = session.execute(query.order_by(broker_orders.c.created_at)).scalars()
+    rows = session.execute(query.order_by(broker_orders.c.created_at)).all()
     orders = [
         {
             "order_id": row.order_id,
@@ -386,7 +420,7 @@ def get_fills(
     run_id: str | None,
     order_id: str | None = None,
 ) -> dict[str, Any]:
-    run = resolve_run(session, run_id)
+    run = resolve_run(session, config, run_id)
     if run is None:
         return _envelope(
             session=session, config=config, run=None, as_of=None, payload={"fills": []}
@@ -394,7 +428,7 @@ def get_fills(
     query = select(fills).where(fills.c.run_id == run.run_id)
     if order_id is not None:
         query = query.where(fills.c.order_id == order_id)
-    rows = session.execute(query.order_by(fills.c.ts)).scalars()
+    rows = session.execute(query.order_by(fills.c.ts)).all()
     fills_list = [
         {
             "fill_id": row.fill_id,
@@ -420,21 +454,17 @@ def get_order_detail(
 ) -> dict[str, Any]:
     """Full trace: decision -> risk -> intent -> attempts -> order -> fills
     -> reservations -> ledger events, exactly as persisted."""
-    run = resolve_run(session, run_id)
+    run = resolve_run(session, config, run_id)
     if run is None:
         return _envelope(
             session=session, config=config, run=None, as_of=None, payload={"error": "no-run"}
         )
-    order = (
-        session.execute(
-            select(broker_orders).where(
-                broker_orders.c.run_id == run.run_id,
-                broker_orders.c.order_id == order_id,
-            )
+    order = session.execute(
+        select(broker_orders).where(
+            broker_orders.c.run_id == run.run_id,
+            broker_orders.c.order_id == order_id,
         )
-        .scalars()
-        .first()
-    )
+    ).first()
     if order is None:
         return _envelope(
             session=session,
@@ -444,46 +474,34 @@ def get_order_detail(
             quality_flags=["not-found"],
             payload={"error": f"order {order_id} not found for this run"},
         )
-    intent = (
-        session.execute(
-            select(order_intents).where(
-                order_intents.c.run_id == run.run_id, order_intents.c.intent_id == order.intent_id
-            )
+    intent = session.execute(
+        select(order_intents).where(
+            order_intents.c.run_id == run.run_id, order_intents.c.intent_id == order.intent_id
         )
-        .scalars()
-        .first()
-    )
+    ).first()
     decision = None
     if intent is not None:
-        decision = (
-            session.execute(
-                select(decisions).where(
-                    decisions.c.run_id == run.run_id,
-                    decisions.c.decision_id == intent.decision_id,
-                )
+        decision = session.execute(
+            select(decisions).where(
+                decisions.c.run_id == run.run_id,
+                decisions.c.decision_id == intent.decision_id,
             )
-            .scalars()
-            .first()
-        )
+        ).first()
     risk = None
     if decision is not None:
-        risk = (
-            session.execute(
-                select(risk_evaluations).where(
-                    risk_evaluations.c.run_id == run.run_id,
-                    risk_evaluations.c.decision_id == decision.decision_id,
-                )
+        risk = session.execute(
+            select(risk_evaluations).where(
+                risk_evaluations.c.run_id == run.run_id,
+                risk_evaluations.c.decision_id == decision.decision_id,
             )
-            .scalars()
-            .first()
-        )
+        ).first()
     attempts = [
         {
             "attempt_id": row.attempt_id,
             "submitted_at": _iso(row.submitted_at),
             "outcome": row.outcome,
-            "raw_status": row.raw_status,
-            "error_class": row.error_class,
+            "raw_status": redacted_evidence(row.raw_status),
+            "error_class": redacted_evidence(row.error_class),
         }
         for row in session.execute(
             select(submission_attempts)
@@ -492,7 +510,7 @@ def get_order_detail(
                 submission_attempts.c.order_id == order_id,
             )
             .order_by(submission_attempts.c.submitted_at)
-        ).scalars()
+        ).all()
     ]
     events = [
         {
@@ -500,13 +518,13 @@ def get_order_detail(
             "ts": _iso(row.ts),
             "from_status": row.from_status,
             "to_status": row.to_status,
-            "reason": row.reason,
+            "reason": redacted_evidence(row.reason),
         }
         for row in session.execute(
             select(order_events)
             .where(order_events.c.run_id == run.run_id, order_events.c.order_id == order_id)
             .order_by(order_events.c.seq)
-        ).scalars()
+        ).all()
     ]
     fills_list = [
         {
@@ -521,7 +539,7 @@ def get_order_detail(
             select(fills)
             .where(fills.c.run_id == run.run_id, fills.c.order_id == order_id)
             .order_by(fills.c.ts)
-        ).scalars()
+        ).all()
     ]
     fill_ids = [fill["fill_id"] for fill in fills_list]
     vwap: dict[str, Any] = {}
@@ -540,7 +558,7 @@ def get_order_detail(
             reservations.c.run_id == run.run_id,
             reservations.c.order_id == order_id,
         )
-    ).scalars()
+    ).all()
     reservation_list = [
         {
             "reservation_id": row.reservation_id,
@@ -562,7 +580,7 @@ def get_order_detail(
             "fee": _money(row.fee),
             "cash_after": _money(row.cash_after),
             "position_after": _money(row.position_after),
-            "note": row.note,
+            "note": redacted_evidence(row.note),
         }
         for row in session.execute(
             select(ledger_events)
@@ -573,7 +591,7 @@ def get_order_detail(
                 else ledger_events.c.ref_id.is_(None),
             )
             .order_by(ledger_events.c.ts)
-        ).scalars()
+        ).all()
         if not (fill_ids and row.ref_id not in fill_ids)
     ]
     return _envelope(
@@ -592,7 +610,7 @@ def get_order_detail(
                 "filled_quantity": _money(order.filled_quantity),
                 "time_in_force": order.time_in_force,
                 "status": order.status,
-                "raw_status": order.raw_status,
+                "raw_status": redacted_evidence(order.raw_status),
                 "created_at": _iso(order.created_at),
                 "updated_at": _iso(order.updated_at),
                 "cancel_requested_at": _iso(order.cancel_requested_at),
@@ -614,8 +632,8 @@ def get_order_detail(
                     "decision_id": decision.decision_id,
                     "action": decision.action,
                     "target_weight": _money(decision.target_weight),
-                    "rationale": decision.rationale,
-                    "invalidation": decision.invalidation,
+                    "rationale": redacted_evidence(decision.rationale),
+                    "invalidation": redacted_evidence(decision.invalidation),
                     "decision_at": _iso(decision.decision_at),
                     "strategy_version": decision.strategy_version,
                 }
@@ -625,7 +643,7 @@ def get_order_detail(
             "risk_evaluation": (
                 {
                     "outcome": risk.outcome,
-                    "reasons": risk.reasons,
+                    "reasons": redacted_evidence(risk.reasons),
                     "limits": risk.limits,
                     "evaluated_at": _iso(risk.evaluated_at),
                 }
@@ -643,7 +661,7 @@ def get_order_detail(
 
 
 def get_positions(session: Session, config: TradingConfig, run_id: str | None) -> dict[str, Any]:
-    run = resolve_run(session, run_id)
+    run = resolve_run(session, config, run_id)
     if run is None:
         return _envelope(
             session=session, config=config, run=None, as_of=None, payload={"positions": []}
@@ -658,7 +676,7 @@ def get_positions(session: Session, config: TradingConfig, run_id: str | None) -
             .order_by(portfolio_snapshots.c.ts.desc())
             .limit(1)
         )
-    ).scalar_one_or_none()
+    ).first()
     if row is None:
         return _envelope(
             session=session,
@@ -699,8 +717,8 @@ def get_positions(session: Session, config: TradingConfig, run_id: str | None) -
         payload={
             "positions": positions,
             "cash": _money(row.cash),
-            "equity": _money(row.equity),
-            "gross_exposure": _money(row.gross_exposure),
+            "equity": _money(row.equity) if not missing else None,
+            "gross_exposure": _money(row.gross_exposure) if not missing else None,
             "reconciliation_status": row.reconciliation_status,
         },
     )
@@ -755,25 +773,22 @@ def get_instrument_quality(session: Session, run_id: str) -> list[dict[str, Any]
 def get_instrument(
     session: Session, config: TradingConfig, run_id: str | None, instrument_id: str
 ) -> dict[str, Any]:
-    run = resolve_run(session, run_id)
+    run = resolve_run(session, config, run_id)
     if run is None:
         return _envelope(
             session=session, config=config, run=None, as_of=None, payload={"error": "no-run"}
         )
-    row = (
-        session.execute(
-            select(instruments).where(
-                instruments.c.run_id == run.run_id, instruments.c.instrument_id == instrument_id
-            )
+    row = session.execute(
+        select(instruments).where(
+            instruments.c.run_id == run.run_id, instruments.c.instrument_id == instrument_id
         )
-        .scalars()
-        .first()
-    )
+    ).first()
     if row is None:
         return _envelope(
             session=session,
             config=config,
             run=run,
+            as_of=None,
             quality_flags=["not-found"],
             payload={"error": f"instrument {instrument_id} not in this run"},
         )
@@ -800,7 +815,7 @@ def get_instrument(
                 "quantity_precision": row.quantity_precision,
                 "is_synthetic": row.is_synthetic,
                 "eligible": row.eligible,
-                "notes": row.notes,
+                "notes": redacted_evidence(row.notes),
             },
             "data_status": quality,
         },
@@ -815,7 +830,7 @@ def get_prices(
     Ticks the run observed for other instruments but this one did not are
     reported in ``missing_ticks`` and rendered as gaps: never back-filled.
     """
-    run = resolve_run(session, run_id)
+    run = resolve_run(session, config, run_id)
     if run is None:
         return _envelope(session=session, config=config, run=None, as_of=None, payload={"bars": []})
     bars = [
@@ -835,7 +850,7 @@ def get_prices(
                 market_bars.c.instrument_id == instrument_id,
             )
             .order_by(market_bars.c.ts)
-        ).scalars()
+        ).all()
     ]
     present = {row["ts"] for row in bars if row["ts"] is not None}
     all_ticks = [
@@ -860,7 +875,7 @@ def get_prices(
             activity_events.c.ts,
             activity_events.c.event_type,
             activity_events.c.event_id,
-            func.jsonb_extract(activity_events.c.correlation, "instrument"),
+            activity_events.c.correlation["instrument"].astext,
             activity_events.c.payload,
         ).where(activity_events.c.run_id == run.run_id)
     ):
@@ -890,7 +905,7 @@ def get_prices(
             )
             .join(broker_orders, order_events.c.order_id == broker_orders.c.order_id)
             .order_by(order_events.c.ts)
-        ).scalars()
+        ).all()
     ]
     fill_markers = [
         (
@@ -907,7 +922,7 @@ def get_prices(
                 fills.c.instrument_id == instrument_id,
             )
             .order_by(fills.c.ts)
-        ).scalars()
+        ).all()
     ]
     markers = [
         {"kind": kind, "label": label, "ts": ts, "ref_id": ref}
@@ -934,7 +949,7 @@ def get_prices(
 
 
 def get_cash_ledger(session: Session, config: TradingConfig, run_id: str | None) -> dict[str, Any]:
-    run = resolve_run(session, run_id)
+    run = resolve_run(session, config, run_id)
     if run is None:
         return _envelope(
             session=session, config=config, run=None, as_of=None, payload={"events": []}
@@ -947,7 +962,7 @@ def get_cash_ledger(session: Session, config: TradingConfig, run_id: str | None)
         )
         .order_by(ledger_events.c.ts.desc(), ledger_events.c.event_id.desc())
         .limit(200)
-    ).scalars()
+    ).all()
     events = [
         {
             "event_id": row.event_id,
@@ -962,7 +977,7 @@ def get_cash_ledger(session: Session, config: TradingConfig, run_id: str | None)
             "position_after": _money(row.position_after),
             "ref_type": row.ref_type,
             "ref_id": row.ref_id,
-            "note": row.note,
+            "note": redacted_evidence(row.note),
         }
         for row in rows
     ]

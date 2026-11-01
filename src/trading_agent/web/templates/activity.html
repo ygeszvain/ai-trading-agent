@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set page = "activity" %}
 {% block content %}
 <div class="filterbar">
   <label>Run: <select data-run-select></select></label>
@@ -6,9 +7,5 @@
   <span data-flags-activity class="muted">…</span>
 </div>
 <div data-activity></div>
-<script>
-  document.querySelectorAll("[data-run-select]").forEach((el) => {
-    TA.api("/api/v1/runs").then((env) => TA.loadRuns(el)).catch(() => {});
-  });
-</script>
+
 {% endblock %}

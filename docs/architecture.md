@@ -1,4 +1,4 @@
-# Architecture — M0 foundation
+# Architecture — current boundary and historical M0 foundation
 
 **Status:** M0 (Prompt 1) complete, 2026-10-31.
 **Governing spec:** [Robinhood Local AI Trading Build Plan](Robinhood_Local_AI_Trading_Build_Plan.md) (sections 5–7, 14, 16–18, 22).
@@ -10,6 +10,24 @@ and the persistence strategy. The website contract is specified in
 [website.md](website.md). Facts, assumptions, and pending verifications are
 kept separate in [capability_matrix.md](capability_matrix.md); rationale for
 each choice is in [decision_log.md](decision_log.md).
+
+## November 1 security review boundary
+
+Read [the Prompt 10 matrix](security_readiness_review.md) for current observed
+behavior. M0 details below are historical. Coding/research/owner/execution/
+monitoring are logical planes; separate OS identities, privileged secret
+injection and independent monitoring have **not** been deployed. Python imports
+under one owner are not a security sandbox. Research has no financial activation
+method, browser APIs read persisted scoped state, and live dispatch always
+rejects even with hypothetical healthy runtime/authorization. Real broker/OAuth
+paths remain quarantined. The owner website session authorizes reads only.
+
+A read-only repeatable-read database transaction protects each core API response;
+it does not supply a multi-request stream snapshot handshake. DB outage denies
+session access and displays unavailable data. A pause/stop in this disconnected
+application cannot guarantee cancellation or liquidation at a broker. Runtime
+and account monitoring/secret separation require independent owner validation.
+Overall readiness is FAIL; do not infer a safe deployed system from module names.
 
 ## 1. Product shape and trust planes
 

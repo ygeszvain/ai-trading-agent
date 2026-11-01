@@ -21,7 +21,7 @@ from zoneinfo import ZoneInfo
 
 from ..config.models import TradingConfig
 from ..contracts.decision import Decision, RiskEvaluation, RiskOutcome
-from ..contracts.market import Quote
+from ..contracts.market import QualityFlag, Quote
 from ..contracts.orders import OrderIntent
 from ..money import round_money, round_qty
 
@@ -51,6 +51,7 @@ class RiskState:
     # Protective controls
     day_start_nav: Decimal | None = None  # for the daily loss trigger
     high_water_mark: Decimal = Decimal("0")  # trailing drawdown HWM
+    account_as_of: datetime | None = None
     paused: bool = False  # set by a protective control
 
 
@@ -79,14 +80,64 @@ class RiskEngine:
         is_protective_exit: bool = False,
     ) -> tuple[RiskEvaluation, Decimal]:
         reasons: list[tuple[str, str]] = []
-        reduced_quantity = intent.quantity
         reject = False
 
+        amounts = (
+            state.nav,
+            state.cash,
+            state.reserved_cash,
+            intent.quantity,
+            intent.limit_price,
+            state.pending_entry_value,
+            state.high_water_mark,
+            *state.positions.values(),
+            *(value for value in state.marks.values() if value is not None),
+        )
+        if any(not value.is_finite() for value in amounts) or state.nav <= 0:
+            raise ValueError("risk inputs must be finite with positive NAV")
+        if now.tzinfo is None or decision.decision_at.tzinfo is None:
+            raise ValueError("risk timestamps must be timezone aware")
+        if (
+            intent.run_id != decision.run_id
+            or intent.account_alias != decision.account_alias
+            or intent.instrument_id != decision.instrument_id
+            or intent.decision_id != decision.decision_id
+            or intent.policy_version != decision.risk_policy_version
+            or intent.policy_version != self._risk.policy_version
+            or intent.strategy_version != decision.strategy_version
+            or decision.mode != self._config.app.mode.value
+        ):
+            reject = True
+            reasons.append(("intent_binding", "identity, mode, strategy or policy mismatch"))
         nav = round_money(state.nav)
         risk = self._risk
         is_buy = intent.side.value == "buy"
         limit = intent.limit_price
 
+        if is_protective_exit and is_buy:
+            reject = True
+            reasons.append(("protective_exit", "a protective exit cannot increase exposure"))
+        if is_buy:
+            if (
+                state.account_as_of is None
+                or (now - state.account_as_of).total_seconds() < 0
+                or (now - state.account_as_of).total_seconds() > risk.max_account_state_age_seconds
+            ):
+                reject = True
+                reasons.append(("account_freshness", "account state unavailable or stale"))
+            if (
+                state.day_start_nav is None
+                or state.day_start_nav <= 0
+                or state.high_water_mark <= 0
+            ):
+                reject = True
+                reasons.append(("loss_history", "loss/drawdown reference unavailable"))
+            if any(
+                qty > 0 and state.marks.get(symbol) is None
+                for symbol, qty in state.positions.items()
+            ):
+                reject = True
+                reasons.append(("missing_mark", "held exposure cannot be valued"))
         # --- instrument identity / allowlist ----------------------------
         if intent.instrument_id in self._config.paper.synthetic_fixture_universe:
             synthetic = True
@@ -114,7 +165,7 @@ class RiskEngine:
                 )
 
         # --- decision validity ------------------------------------------
-        if now > decision.expires_at:
+        if now >= decision.expires_at or now < decision.decision_at:
             reject = True
             reasons.append(
                 ("decision_expiry", f"decision expired at {decision.expires_at.isoformat()}")
@@ -125,7 +176,14 @@ class RiskEngine:
         if quote is None:
             reject = True
             reasons.append(("price_valid", "no quote available"))
-        elif quote.price <= 0:
+        elif (
+            not quote.price.is_finite()
+            or quote.price <= 0
+            or quote.instrument_id != intent.instrument_id
+            or quote.quality not in {QualityFlag.VALID, QualityFlag.CORRECTED}
+            or (now - quote.as_of).total_seconds() > risk.max_quote_age_seconds
+            or (quote.as_of - now).total_seconds() > risk.max_clock_offset_seconds
+        ):
             reject = True
             reasons.append(("price_valid", f"nonpositive quote {quote.price}"))
         else:
@@ -241,7 +299,7 @@ class RiskEngine:
             # Gross exposure limit.
             gross = self._gross_exposure(state)
             gross_cap = self._fraction(nav, risk.max_gross_nav_fraction)
-            if round_money(gross + new_worst) > gross_cap:
+            if round_money(gross + state.pending_entry_value + quantity * limit) > gross_cap:
                 reasons.append(
                     (
                         "gross_exposure",
@@ -252,7 +310,13 @@ class RiskEngine:
                 reject = True
 
             # Minimum cash floor (post-trade: unreserved cash minus this order).
-            post_trade_cash = round_money(available - round_money(quantity * limit))
+            post_trade_cash = round_money(
+                available
+                - round_money(quantity * limit)
+                - round_money(
+                    quantity * limit * self._config.engine.commission_bps / Decimal(10000)
+                )
+            )
             if post_trade_cash < self._fraction(nav, risk.min_cash_nav_fraction):
                 reasons.append(
                     (
@@ -406,7 +470,7 @@ class RiskEngine:
             reasons=tuple(reasons),
             limits=limits,
         )
-        return evaluation, reduced_quantity
+        return evaluation, Decimal(0) if reject else quantity
 
     # -- computation helpers ---------------------------------------------
 

@@ -1,11 +1,10 @@
 {% extends "base.html" %}
+{% set page = "order-detail" %}
 {% block content %}
 {% set oid = order_id %}
 <span data-flags-order class="muted">…</span>
 <div data-order><p class="muted">loading…</p></div>
 <h2>Fills</h2>
 <div data-order-fills></div>
-<script>
-  document.body.dataset.orderId = {{ oid | tojson }};
-</script>
+
 {% endblock %}

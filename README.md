@@ -9,7 +9,8 @@ and reconciliation services govern financial behavior.
 simulation, backtesting, economic evaluation, research, gateway scaffolding,
 learning experiments, and an authenticated local website. These components are
 at different stages of verification. The full test suite currently has failures;
-see [verification and known limitations](docs/publication_status.md).
+see [current security review](docs/security_readiness_review.md) and the
+historical [publication baseline](docs/publication_status.md).
 
 Prompt 9's research-only learning workflow is now implemented in this source
 checkout. Run `uv run trading-agent learning demo` for matured and incomplete
@@ -64,7 +65,9 @@ owner-token login, website startup, tests, troubleshooting, and shutdown.
 The website binds to `http://127.0.0.1:8000` and reads persisted database state;
 running a file-based backtest does not populate its portfolio. The delivered
 pages cover Overview, Activity, Orders/fills, Portfolio, and instrument details.
-Full website acceptance and browser verification remain pending.
+Core persisted browser failure checks now pass in the isolated review fixture.
+Normal startup is blocked by a detected migration/schema mismatch; full M5
+website acceptance remains pending. See the [security evidence matrix](docs/security_readiness_review.md).
 
 Do not publish the application server, expose a tunnel, or connect a financial
 account as part of this quick start. Publishing this source repository does not
@@ -80,6 +83,7 @@ uv run mypy
 ```
 
 These are real checks, not an all-green claim. Known failures are recorded in
+[security review](docs/security_readiness_review.md) and the historical
 [publication_status.md](docs/publication_status.md). Please retain failed results
 and evaluation objectives when contributing. Read [CONTRIBUTING.md](CONTRIBUTING.md)
 and [AGENTS.md](AGENTS.md) before changing code. Use synthetic data and keep
@@ -105,8 +109,10 @@ The [build plan](docs/Robinhood_Local_AI_Trading_Build_Plan.md),
 product and boundaries. [Build status](docs/build_status.md) retains the original
 M0 acceptance evidence; the publication addendum distinguishes the current
 snapshot from completed milestones. No later milestone is certified by this
-publication. Prompt 9 was explicitly selected separately. The next numbered task is
-**Prompt 10**, with earlier Prompt 2–8 acceptance still unresolved.
+publication. Prompts 9 and 10 were explicitly selected separately. Prompt 10
+fixes boundary defects but reports overall readiness **FAIL** (156 passed / 3
+failed tests). The next numbered task is **Prompt 11**, only when selected;
+earlier acceptance and operational dependencies remain unresolved.
 
 ## License
 

@@ -22,7 +22,7 @@ import hashlib
 import json
 import os
 import sys
-from datetime import UTC, date, datetime
+from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
 from typing import Any
@@ -33,7 +33,7 @@ import yaml
 from ..backtest.engine import BookSettings, CloseSeries, run_backtest
 from ..backtest.report import render_markdown, write_report_package
 from ..config.loading import ConfigEnvironment, load_config
-from ..config.models import BacktestSettings, TradingConfig, is_live_mode
+from ..config.models import BacktestSettings, TradingConfig
 from ..data.provider import MarketDataProvider, SyntheticMarketProvider
 from ..data.realdata import (
     RealDataCache,
@@ -658,21 +658,7 @@ def _run_check_config(args: argparse.Namespace) -> int:
 
 
 def _live_authorized(config: TradingConfig) -> str:
-    if not is_live_mode(config.app.mode):
-        return "LIVE_NOT_AUTHORIZED (mode is not live)"
-    live = config.live
-    if not live.enabled:
-        return "LIVE_NOT_AUTHORIZED (live trading disabled)"
-    if live.approved_capital_usd <= 0:
-        return "LIVE_NOT_AUTHORIZED (no approved capital)"
-    if not live.owner_authorization_ref:
-        return "LIVE_NOT_AUTHORIZED (no owner authorization on file)"
-    if (
-        live.authorization_expires_at is not None
-        and datetime.now(UTC) >= live.authorization_expires_at
-    ):
-        return "LIVE_NOT_AUTHORIZED (authorization expired)"
-    return "LIVE_AUTHORIZED"
+    return config.authority()
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -684,10 +670,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"error: {error}", file=sys.stderr)
         return 2
     except Exception as error:  # noqa: BLE001 - the CLI surface is one fail-closed boundary
-        print(f"error: {type(error).__name__}: {error}", file=sys.stderr)
-        import traceback
-
-        traceback.print_exc()
+        print(
+            f"error: operation failed ({type(error).__name__}); details withheld", file=sys.stderr
+        )
         return 1
 
 

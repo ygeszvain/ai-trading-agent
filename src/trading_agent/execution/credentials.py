@@ -14,12 +14,11 @@ Security invariants (build plan sections 6 and 20):
 
 from __future__ import annotations
 
-import json
-import os
 from datetime import UTC, datetime
 from pathlib import Path
 
 from ..contracts.broker import BrokerError
+from ..security.files import read_private_json, write_private_json
 
 
 class CredentialError(BrokerError):
@@ -58,25 +57,23 @@ class TokenStore:
             "created_at": datetime.now(UTC).isoformat(),
             "note": note,
         }
-        tmp = self._path.with_suffix(self._path.suffix + ".tmp")
         try:
-            tmp.write_text(json.dumps(payload, indent=2))
-            os.chmod(tmp, 0o600)
-            os.replace(tmp, self._path)
-        finally:
-            tmp.unlink(missing_ok=True)
+            write_private_json(self._path, payload, replace=True)
+        except (OSError, ValueError):
+            raise CredentialError("credential store write failed") from None
 
     def load(self) -> str | None:
         """Return the token, or None when no usable store exists."""
         if not self.exists():
             return None
         try:
-            payload = json.loads(self._path.read_text())
-            token = str(payload.get("token", ""))
+            payload = read_private_json(self._path)
+            token = payload.get("token")
+            if not isinstance(token, str) or not token or any(ord(ch) < 32 for ch in token):
+                raise ValueError("credential value invalid")
         except (OSError, ValueError, TypeError) as error:
             raise CredentialError(
-                f"credential store unreadable at {self._path}; "
-                "treated as 'no token' (fail-closed)"
+                f"credential store unreadable at {self._path}; treated as 'no token' (fail-closed)"
             ) from error
         return token or None
 
@@ -85,14 +82,14 @@ class TokenStore:
         if not self.exists():
             return {"present": False}
         try:
-            payload = json.loads(self._path.read_text())
+            payload = read_private_json(self._path)
         except (OSError, ValueError, TypeError):
             return {"present": False, "readable": False}
         return {
             "present": True,
             "readable": True,
             "created_at": payload.get("created_at"),
-            "note": payload.get("note") or "",
+            "note": "[local private metadata]",
             "token_masked": self.mask(str(payload.get("token", ""))),
         }
 
@@ -102,7 +99,7 @@ class TokenStore:
         token = token.strip()
         if len(token) <= 8:
             return "\u2022" * 8
-        return f"{token[:4]}\u2026{token[-4:]}"
+        return "[REDACTED]"
 
     @staticmethod
     def redact(text: str, token: str) -> str:

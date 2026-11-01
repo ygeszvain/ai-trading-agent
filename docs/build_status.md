@@ -1,9 +1,79 @@
 # Trading agent build status
 
-**Last updated:** 2026-11-01 (Prompt 9 research-only implementation; historical evidence retained)
+**Last updated:** 2026-11-01 (Prompt 10 security review; historical evidence retained)
 **Current financial authority:** LIVE_NOT_AUTHORIZED
 **Approved live capital:** 0 USD (requested USD 1,000 pilot: recorded, activation pending — plan section 24)
-**Next numbered task:** Prompt 10 — security/failure readiness review; earlier acceptance gaps remain
+**Next numbered task:** Prompt 11 only if selected — readiness remains blocked by unresolved upstream failures
+
+## Prompt 10 — Security and failure readiness review
+
+Completed the explicitly requested offline review on `codex/security-readiness`.
+**Overall readiness: FAIL; no live or investment readiness certificate.** The
+[evidence matrix and prioritized defect report](security_readiness_review.md)
+distinguish CODE_PASS, EXTERNAL_VALIDATION_PENDING, BLOCKED and FAIL.
+
+### Concrete fixes and acceptance evidence
+
+- Correct risk sizing returned to execution; protective BUY cannot bypass
+  controls; fresh account/quote, identity/version bindings and pending exposure
+  checks. Fully populated hypothetical live activation still always rejects.
+- No wildcard inference endpoints or credential-forwarding redirects; explicit
+  read tool set and RPC response identity; legacy OAuth and unvalidated real
+  gateway quarantined. Disabled construction does not read runtime credentials.
+- Protected atomic owner/runtime files; no bootstrap token printing; persisted
+  session expiry/revocation; exact Host/port and Origin; POST-only logout.
+- Core website row queries and account/mode/run scope repaired; read-only,
+  repeatable-read PostgreSQL requests; exact decimals, escaped/redacted evidence,
+  unavailable NAV, visible gaps and failures, and run-preserving navigation.
+- Fee-inclusive ledger basis/replay, duplicate raw-fill detection, stale-writer
+  rejection, fail-closed audit errors/missing marks; ambiguous equal-timestamp
+  replay blocks pending durable-order migration. Passive benchmark fees and
+  composite starting capital corrected without changing economic assertions.
+- Fresh-install schema drift is now an explicit startup error rather than an
+  apparent successful head stamp followed by failed reads. The underlying
+  migration mismatch is unresolved; synthetic website tests use full metadata.
+
+| Exact command / check (2026-11-01) | Actual result |
+| --- | --- |
+| `TRADING_AGENT_REVIEW_DB=postgresql+psycopg://review@127.0.0.1:55433/review uv run pytest tests/security -q` | **29 passed**, 1 upstream deprecation warning; disposable PostgreSQL exercised, none skipped |
+| Same env + `uv run pytest -q` | **156 passed, 3 failed**, 1 warning; same three `tests/evaluation/test_econ_eval.py` failures retained |
+| `uv run ruff check src/trading_agent/security tests/security tests/auth_helpers.py src/trading_agent/db/migrate.py` | **PASS** |
+| `uv run ruff check src tests` | **FAIL**, 61 findings; broader pre-existing lint debt remains |
+| `uv run mypy` | **FAIL**, 122 errors / 24 files, 97 source files checked; broader typing debt remains |
+| `uv run python -m compileall -q src tests` | **PASS** |
+| `node --check src/trading_agent/web/static/app.js` | **PASS** |
+| Playwright named-session `run-code --filename tests/security/browser_checks.js` against persisted fixture server on 127.0.0.1:8020 | **PASS** core scope, exact money, UNKNOWN/partial fills, escaped evidence, HOLD/rejection/cancel/correction, explicit missing session, network failure, logout; no external browser origins or JS page errors. Desktop/narrow screenshots visually inspected. |
+| Synthetic `pg_dump -Fc` / `pg_restore --exit-on-error`, separate `review_restore` DB | **PASS** all 25 table counts, cash 1008, realized P&L 8, historical max equity 1200 |
+| Fresh Alembic `run_migrations(config)` in isolated `review_migrations` DB | **FAIL** compatibility after head `c4a7e19b2d05`; new guard blocks startup; missing tables/columns listed in review |
+| Repository-only provider-token/private-key pattern scan | 169 files + 8 revisions; no pattern matches. Limited scan; no unrelated private files/stores inspected. |
+
+### Remaining prioritized defects and limits
+
+1. **FAIL:** Alembic/current schema incompatibility and integrated pipeline
+   readiness; metadata fixture success is not installation success.
+2. **BLOCKED/FAIL:** durable ordering for equal-time ledger history, account-wide
+   concurrent reservation/job fencing, legal lifecycle transitions, broker
+   corrections/manual trades/external flows and integrated crash recovery.
+3. **FAIL:** three existing economic verdict/fold assertions; old same-close
+   backtest path; incomplete survivorship/dividend/total-return evidence.
+4. **BLOCKED:** independent watchdog/stop controls, separated privileged runtime,
+   full M5 pages/stream bootstrap-gap-reconnect/exports/controls.
+5. **EXTERNAL_VALIDATION_PENDING:** actual broker capabilities/account binding,
+   authentication/partitions/races, owner-operated restore/stop and prospective
+   record. None can pass from mocks; no such check was performed.
+
+Changed areas: `config`, `gates`, `risk`, `execution`/MCP, `ledger`, `research`,
+`data`, `backtest`, `engine`, `db/migrate`, `security`, and core `web` routes,
+queries/templates/assets; targeted tests in `tests/security`, existing auth/gate
+checks, and current documentation. The detailed review links risks to specific
+implementation/test names and preserves the original failed observations. No
+objectives, holdouts, failed economic assertions, account limits or unrelated
+work were overwritten. No push, deployment, alert, broker call or credential
+extraction occurred. The disposable review service was removed after checking.
+
+Stop at Prompt 10. Prompt 11 is the next number only when explicitly selected;
+it is not authority to bypass these blockers. Owner-operated checks are listed
+separately in the report. Financial authority: **LIVE_NOT_AUTHORIZED**.
 
 ## Prompt 9 — Controlled research learning (M8 research only)
 
@@ -226,18 +296,16 @@ None of these block Prompt 2's offline work.
 | 7 | Official Robinhood gateway with writes disabled (M4) | Pending |
 | 8 | Full local trading website, monitoring, and forward paper mode (M5) | Pending |
 | 9 | Controlled learning in research | **Offline research scope implemented 2026-11-01**; evidence above, real prospective integration pending |
-| 10 | Security and failure-readiness review | Pending |
+| 10 | Security and failure-readiness review | **Review complete 2026-11-01**; concrete fixes/tests and matrix recorded; overall readiness FAIL |
 | 11 | Supervised-live readiness; activation disabled (M6) | Pending |
 | 12 | Bounded-autonomy readiness; activation disabled (M7/M8) | Pending |
 
 ## Next action
 
-The explicitly selected Prompt 9 research work is ready for review. The next
-numbered task is Prompt 10's security and failure-readiness review, only when
-requested. Reconcile earlier M1–M5 acceptance and the three existing M3 economic
-failures before making readiness or investment claims. Do not treat this
-research demonstration as permission to connect accounts, promote, deploy, or
-trade. The historical Prompt 2 handoff remains an unresolved dependency rather
-than proof of completed upstream milestones.
+Prompt 10 stops with a local, reviewable security/failure report and concrete
+patches. Prompt 11 is next only when explicitly selected, and readiness remains
+blocked by the schema, recovery, economic and operational gaps above. Resolve
+those with scoped work before claiming earlier M1–M5 acceptance. Do not connect
+accounts, promote, deploy, increase capital or trade from this review.
 
 Current financial authority: **LIVE_NOT_AUTHORIZED**.

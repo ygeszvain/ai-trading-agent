@@ -331,7 +331,10 @@ def test_dashboard_auth_scope_and_reads_do_not_write_or_call_models(
     path = run_demo(tmp_path)
     config = TradingConfig.model_validate(valid_config_dict)
     config.learning.research_store_dir = tmp_path
-    monkeypatch.setattr("trading_agent.web.app.create_app_engine", lambda *a, **kw: object())
+    from tests.auth_helpers import auth_only_engine, register_cookie
+
+    engine = auth_only_engine()
+    monkeypatch.setattr("trading_agent.web.app.create_app_engine", lambda *a, **kw: engine)
     store = auth.AuthStore(
         path=tmp_path / "not-created",
         owner_token="fixture-token",
@@ -351,7 +354,7 @@ def test_dashboard_auth_scope_and_reads_do_not_write_or_call_models(
     client = TestClient(app, base_url="http://127.0.0.1:8000")
     url = f"/learning?experiment_id={path.stem}"
     assert client.get(url, follow_redirects=False).status_code == 302
-    client.cookies.set(auth.SESSION_COOKIE, auth.issue_session(store))
+    client.cookies.set(auth.SESSION_COOKIE, register_cookie(engine, store))
     before = {p: p.read_bytes() for p in tmp_path.rglob("*.json")}
     response = client.get(url)
     assert response.status_code == 200
@@ -363,7 +366,7 @@ def test_dashboard_auth_scope_and_reads_do_not_write_or_call_models(
     assert client.get("/learning?experiment_id=../../private").status_code == 404
     assert {p: p.read_bytes() for p in tmp_path.rglob("*.json")} == before
     assert calls == []
-    # The route has no database/model/broker dependency; DB access would fail on object().
+    # Only the authentication database is used; research artifact reads never query financial tables.
     config.app.mode = TradingMode.PAPER
     assert client.get(url).status_code == 404
 

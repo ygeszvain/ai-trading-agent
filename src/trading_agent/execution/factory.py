@@ -66,5 +66,7 @@ def build_shadow_adapter(
                     "(set TRADING_AGENT_CREDENTIAL_PHRASE or pass phrase=)"
                 ]
             )
-        return RobinhoodMcpBrokerAdapter(config, session=session, phrase=phrase)
+        raise ConfigError(
+            ["legacy vault shadow integration is unavailable pending owner-run validation"]
+        )
     return SimulatorBrokerAdapter(config, session=session)

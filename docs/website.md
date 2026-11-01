@@ -1,9 +1,12 @@
 # Local trading website — M0 contract
 
-**Status:** Specification only. No UI, routes, or templates exist yet.
-M0 (Prompt 1) documents this contract; M1 (Prompt 2) builds the first four
-pages; M5 (Prompt 8) completes the site. **Nothing on this page is an
-implemented capability.**
+**Current status — November 1:** core read pages and Learning exist; Prompt 10
+exercised their material persisted synthetic failure paths in an isolated fixture.
+See [security_readiness_review.md](security_readiness_review.md). Normal startup
+is blocked by migration/schema incompatibility. Full M5 pages, stream cursor/
+reconnect, exports, complete consistent bootstrap and owner controls remain
+unimplemented/unverified. The M0 contract below describes requirements, not an
+acceptance certificate. Browser reads do not authorize broker or model work.
 
 **Governing specs:** [Local Trading Website Spec](Local_Trading_Website_Spec.md)
 and build plan section 18.

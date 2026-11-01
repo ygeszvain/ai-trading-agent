@@ -15,6 +15,9 @@ from typing import Any
 
 import httpx
 
+from ...security.loopback import require_official_broker_url
+from ..mcp_client import _parse_sse
+
 log = logging.getLogger(__name__)
 
 
@@ -36,6 +39,7 @@ class JsonRpcTransport:
     """
 
     def __init__(self, endpoint_url: str, *, http: httpx.Client, timeout: float = 30.0) -> None:
+        require_official_broker_url(endpoint_url)
         self._endpoint_url = endpoint_url
         self._http = http
         self._timeout = timeout
@@ -52,6 +56,9 @@ class JsonRpcTransport:
         Returns the raw result object; for ``tools/list``-style methods this
         is the result payload (e.g. ``{"tools": [...]}``).
         """
+        if method not in {"initialize", "tools/list"}:
+            raise RpcError(-32000, "legacy transport tool dispatch is disabled")
+        require_official_broker_url(self._endpoint_url)
         self._next_id += 1
         body = {
             "jsonrpc": "2.0",
@@ -60,11 +67,18 @@ class JsonRpcTransport:
         }
         if params is not None:
             body["params"] = params
-        headers = {"Content-Type": "application/json", "Accept": "application/json, text/event-stream"}
+        headers = {
+            "Content-Type": "application/json",
+            "Accept": "application/json, text/event-stream",
+        }
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
         response = self._http.post(
-            self._endpoint_url, content=json.dumps(body), headers=headers, timeout=self._timeout
+            self._endpoint_url,
+            content=json.dumps(body),
+            headers=headers,
+            timeout=self._timeout,
+            follow_redirects=False,
         )
         if "Mcp-Session-Id" in response.headers:
             self._session_id = response.headers["Mcp-Session-Id"]
@@ -77,29 +91,39 @@ class JsonRpcTransport:
 
     def notify(self, method: str, params: dict[str, Any] | None = None) -> None:
         """Send a JSON-RPC notification (no response expected)."""
+        if method != "notifications/initialized":
+            raise RpcError(-32000, "legacy transport notification denied")
         body: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
         if params is not None:
             body["params"] = params
         headers = {"Content-Type": "application/json"}
         if self._session_id:
             headers["Mcp-Session-Id"] = self._session_id
-        self._http.post(self._endpoint_url, content=json.dumps(body), headers=headers, timeout=self._timeout)
+        self._http.post(
+            self._endpoint_url,
+            content=json.dumps(body),
+            headers=headers,
+            timeout=self._timeout,
+            follow_redirects=False,
+        )
 
     # ------------------------------------------------------------- decoding
 
     def _decode(self, response: httpx.Response) -> dict[str, Any]:
         content_type = response.headers.get("Content-Type", "")
         if "text/event-stream" in content_type:
-            result = self._decode_sse(response.text)
+            result = _parse_sse(response.text, self._next_id)
         else:
             result = json.loads(response.text)
+        if (
+            not isinstance(result, dict)
+            or result.get("jsonrpc") != "2.0"
+            or type(result.get("id")) is not int
+            or result.get("id") != self._next_id
+        ):
+            raise RpcError(-32000, "response identity mismatch")
         if "error" in result:
-            error = result["error"] or {}
-            raise RpcError(
-                int(error.get("code", -32000)),
-                str(error.get("message", "unknown error")),
-                data=error.get("data"),
-            )
+            raise RpcError(-32000, "broker returned a classified RPC error")
         return result.get("result") or {}
 
     @staticmethod
@@ -108,7 +132,7 @@ class JsonRpcTransport:
         for line in text.splitlines():
             if not line.startswith("data:"):
                 continue
-            payload = line[len("data:"):].strip()
+            payload = line[len("data:") :].strip()
             if not payload or payload == " ":
                 continue
             try:

@@ -8,13 +8,13 @@ body { margin: 0; background: var(--bg); color: var(--text);
        font: 14px/1.5 -apple-system, "SF Pro Text", Menlo, monospace; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
-header { display: flex; align-items: center; gap: 16px; padding: 10px 20px;
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; padding: 10px 20px;
          background: var(--panel); border-bottom: 1px solid var(--border); }
 header .title { font-weight: 600; }
 .badge { padding: 2px 10px; border-radius: 10px; font-size: 12px; font-weight: 700; }
 .badge.sim { background: var(--sim); color: #0d1117; }
 .badge.live { background: var(--live); color: #0d1117; }
-header nav { display: flex; gap: 12px; margin-left: auto; }
+header nav { display: flex; flex-wrap: wrap; gap: 12px; margin-left: auto; }
 main { padding: 20px; max-width: 1200px; margin: 0 auto; }
 .cards { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 20px; }
 .card { background: var(--panel); border: 1px solid var(--border);
@@ -48,7 +48,12 @@ tr:last-child td { border-bottom: none; }
 select, .filterbar select { background: var(--bg); color: var(--text);
                             border: 1px solid var(--border); border-radius: 6px;
                             padding: 4px 8px; }
-.filterbar { display: flex; gap: 10px; align-items: center; margin: 12px 0; }
+.filterbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
+pre { overflow-x: auto; }
+.card .v, footer { overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  header nav { margin-left: 0; width: 100%; }
+}
 footer { color: var(--dim); font-size: 12px; text-align: center; padding: 20px; }
 
 /* Learning artifacts preserve exact amounts and long provenance hashes. */

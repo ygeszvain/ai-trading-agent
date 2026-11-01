@@ -153,9 +153,7 @@ class WebSettings(BaseModel):
         if value is None:
             return None
         if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", value):
-            raise ValueError(
-                f"web.token_env: {value!r} is not a valid environment variable name"
-            )
+            raise ValueError(f"web.token_env: {value!r} is not a valid environment variable name")
         return value
 
     @model_validator(mode="after")
@@ -215,7 +213,7 @@ class LLMSettings(BaseModel):
     def _validate_base_url(cls, value: str) -> str:
         if not _is_loopback_url(value):
             raise ValueError(
-                f"llm.base_url: {value!r} is not a loopback address; accidental cloud "
+                "llm.base_url: endpoint is not a loopback address; accidental cloud "
                 "inference endpoints are rejected (plan section 9)"
             )
         return value
@@ -273,7 +271,7 @@ class BrokerSettings(BaseModel):
     allowlisted_tool_schema_digest: str | None = None
     # M4 shadow mode (plan section 14): read-only observation of the owner's
     # own Robinhood account via the official MCP. Execution stays disabled.
-    shadow_enabled: bool = True
+    shadow_enabled: bool = False
     # Which provider the persistent shadow gateway observes. Defaults to the
     # engine's ``provider`` when null. Lets paper runs keep the simulator
     # while the gateway watches the real account (plan section 14/17).
@@ -283,6 +281,14 @@ class BrokerSettings(BaseModel):
     token_store_path: str = ".data/robinhood_mcp_token.json"
     capability_allowlist_path: str = ".data/robinhood_tool_allowlist.json"
     request_timeout_seconds: float = Field(default=20.0, ge=1.0, le=120.0)
+
+    @field_validator("robinhood_mcp_url")
+    @classmethod
+    def _official_endpoint(cls, value: str) -> str:
+        from ..security.loopback import require_official_broker_url
+
+        require_official_broker_url(value)
+        return value
 
 
 class LiveSettings(BaseModel):
@@ -534,6 +540,13 @@ class SourceSpec(BaseModel):
     api_base_url: str | None = None  # per-source override (tests / mirrors)
     api_key_env: str | None = None
     refresh: SourceRefreshSpec = SourceRefreshSpec()
+
+    @field_validator("api_base_url")
+    @classmethod
+    def _data_origin(cls, value: str | None) -> str | None:
+        if value not in (None, "https://api.stlouisfed.org"):
+            raise ValueError("unapproved data origin")
+        return value
 
     @field_validator("symbols")
     @classmethod
@@ -847,7 +860,7 @@ class TradingConfig(BaseModel):
         return self
 
     def authority(self) -> str:
-        return "LIVE_AUTHORIZED" if self.live.enabled else "LIVE_NOT_AUTHORIZED"
+        return "LIVE_NOT_AUTHORIZED"
 
     def sanitized_summary(self) -> dict[str, Any]:
         """Serialization-safe summary for logs/CLI; never includes secrets."""

@@ -1,9 +1,8 @@
 """Robinhood official MCP broker adapter (M4 — shadow mode).
 
-This is the first real broker gateway in the system. It connects to
-Robinhood's own MCP endpoint (agent.robinhood.com) using the token the
-owner provisioned in their own browser session (plan sections 6 and 20),
-and performs read-only account observation in a persistent shadow loop.
+Real gateway access is quarantined pending verified account-scoped integration.
+An explicitly injected mocked HTTP client can exercise the shadow read contracts.
+Normal construction does not load a credential or connect to the broker.
 
 Security invariants, enforced in code (not documentation):
   * **No execution, ever, in this build.** ``submit_order`` and
@@ -29,11 +28,11 @@ Security invariants, enforced in code (not documentation):
 from __future__ import annotations
 
 import secrets
-from datetime import UTC, datetime, date
+from datetime import UTC, date, datetime
 from decimal import Decimal, InvalidOperation
 
-from sqlalchemy.orm import Session
 from httpx import Client as HttpxClient
+from sqlalchemy.orm import Session
 
 from ..config import TradingConfig
 from ..contracts.broker import (
@@ -50,7 +49,7 @@ from ..contracts.broker import (
 )
 from ..db.schema import broker_gateway_events, broker_snapshots
 from .broker_interface import BrokerAdapter
-from .capability import CapabilityReport, ToolSchema, ToolAllowlist, verify_capability
+from .capability import CapabilityReport, ToolAllowlist, ToolSchema, verify_capability
 from .credentials import TokenStore
 from .mcp_client import McpClient, parse_tool_payload
 
@@ -68,7 +67,8 @@ def _to_decimal(value: object) -> Decimal | None:
     if value is None or isinstance(value, bool):
         return None
     try:
-        return Decimal(str(value))
+        parsed = Decimal(str(value))
+        return parsed if parsed.is_finite() else None
     except InvalidOperation:
         return None
 
@@ -105,7 +105,7 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
         self._config = config
         self._session = session
         self._broker_cfg = config.broker if config is not None else None
-        if self._broker_cfg is not None:
+        if self._broker_cfg is not None and self._broker_cfg.shadow_enabled and http is not None:
             self._token_store = TokenStore(self._broker_cfg.token_store_path)
             self._token = self._token_store.load()
             self._allowlist = ToolAllowlist.from_file(self._broker_cfg.capability_allowlist_path)
@@ -132,7 +132,7 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
             self._client.close()
             self._client = None
 
-    def __enter__(self) -> "RobinhoodMcpBrokerAdapter":
+    def __enter__(self) -> RobinhoodMcpBrokerAdapter:
         return self
 
     def __exit__(self, *exc_info: object) -> None:
@@ -147,9 +147,7 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
         the activation gate stays fail-closed until a real verification
         pass has occurred.
         """
-        shadow_on = (
-            self._broker_cfg.shadow_enabled if self._broker_cfg is not None else False
-        )
+        shadow_on = self._broker_cfg.shadow_enabled if self._broker_cfg is not None else False
         notes: list[str] = []
         if self._broker_cfg is None:
             notes.append("broker not configured - run 'trading-agent broker setup'")
@@ -157,18 +155,14 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
             notes.append("no MCP token stored - run 'trading-agent broker setup'")
         if not shadow_on:
             notes.append("shadow mode disabled in configuration")
-        verified = bool(
-            self._capability is not None and self._capability.verified
-        )
+        verified = bool(self._capability is not None and self._capability.verified)
         connected = self._token is not None and verified
         return BrokerCapabilities(
             provider=self.provider,
             connected=connected,
             reads_enabled=connected and shadow_on,
             execution_enabled=False,
-            verified_capability_digest=(
-                self._capability.digest if verified else None
-            ),
+            verified_capability_digest=(self._capability.digest if verified else None),
             notes=tuple(notes),
         )
 
@@ -188,6 +182,12 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
                 "LIVE_NOT_AUTHORIZED: shadow mode not enabled in configuration",
             )
             raise BrokerUnavailable("LIVE_NOT_AUTHORIZED")
+        if self._http is None:
+            return self._fail(
+                as_of,
+                "real_gateway_disabled",
+                "account-scoped real gateway integration is not validated",
+            )
         if self._token is None:
             self._log_event(
                 "token_missing",
@@ -197,6 +197,10 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
                 "LIVE_NOT_AUTHORIZED: no MCP token stored; run 'trading-agent broker setup'"
             )
 
+        if not self._account_number or self._alias == "unbound":
+            return self._fail(
+                as_of, "account_unverified", "exact account binding required before reads"
+            )
         capability = None
         try:
             client = self._open_client()
@@ -207,7 +211,6 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
             self._log_event("session_failed", f"unexpected: {type(error).__name__}")
             return self._fail(as_of, "session_failed", "unexpected client error")
 
-        schemas = getattr(client, "_schemas", None) or self._list_schemas(client)
         try:
             schemas = self._list_schemas(client)
         except BrokerError as error:
@@ -226,19 +229,20 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
         )
         if not capability.verified:
             return self._fail(
-                as_of, "capability_mismatch",
+                as_of,
+                "capability_mismatch",
                 capability.mismatch_detail or "capability digest mismatch",
                 capability_digest=capability.digest,
             )
 
         # Account identity verification (hard gate when configured).
-        account_payload, account_error = self._read_tool(
-            client, "account", "account_read"
-        )
+        account_payload, account_error = self._read_tool(client, "account", "account_read")
         if account_error is not None:
             self._log_event("account_read_failed", account_error)
             return self._fail(
-                as_of, "account_read_failed", account_error,
+                as_of,
+                "account_read_failed",
+                account_error,
                 capability_digest=capability.digest,
             )
         if self._account_number:
@@ -250,7 +254,8 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
                     "cannot verify identity (fail-closed)",
                 )
                 return self._fail(
-                    as_of, "account_unverified",
+                    as_of,
+                    "account_unverified",
                     "could not read account number to verify identity",
                     capability_digest=capability.digest,
                 )
@@ -261,7 +266,8 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
                     f"{_mask_account_number(self._account_number)}",
                 )
                 return self._fail(
-                    as_of, "account_mismatch",
+                    as_of,
+                    "account_mismatch",
                     "broker account does not match the configured account; "
                     "no data will be displayed",
                     capability_digest=capability.digest,
@@ -271,17 +277,13 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
         # Shadow reads (positions, open orders). Each is best-effort: a failed
         # or unmapped read degrades that field, never the whole snapshot.
         cash = self._extract_cash(account_payload)
-        positions_payload, positions_error = self._read_tool(
-            client, "positions", "positions_read"
-        )
+        positions_payload, positions_error = self._read_tool(client, "positions", "positions_read")
         open_orders_payload, open_orders_error = self._read_tool(
             client, "open_orders", "open_orders_read"
         )
         positions = self._extract_positions(positions_payload) if positions_error is None else None
         open_orders = (
-            self._extract_open_orders(open_orders_payload)
-            if open_orders_error is None
-            else None
+            self._extract_open_orders(open_orders_payload) if open_orders_error is None else None
         )
 
         degraded: list[str] = []
@@ -291,7 +293,8 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
             degraded.append(f"open_orders: {open_orders_error}")
         if cash is None and positions is None and open_orders is None:
             return self._fail(
-                as_of, "read_failed",
+                as_of,
+                "read_failed",
                 "all shadow reads returned no data",
                 capability_digest=capability.digest,
             )
@@ -307,8 +310,9 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
             positions=() if positions is None else positions,
             open_orders=() if open_orders is None else open_orders,
         )
-        self._persist_snapshot(snapshot, capability.digest, as_of,
-                                status="ok" if not degraded else "partial")
+        self._persist_snapshot(
+            snapshot, capability.digest, as_of, status="ok" if not degraded else "partial"
+        )
         return snapshot
 
     # ------------------------------------------------------- no execution
@@ -324,8 +328,7 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
         self._log_event(
             "execution_refused",
             "submit_order invoked; refused by build policy",
-            {"client_order_id": request.client_order_id,
-             "instrument_id": request.instrument_id},
+            {"client_order_id": request.client_order_id, "instrument_id": request.instrument},
         )
         return self._refusal()
 
@@ -345,10 +348,10 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
 
     def _refusal(self) -> OrderResult:
         return OrderResult(
-            order_id=None,
+            accepted=False,
             status=NormalizedOrderStatus.REJECTED,
+            broker_order_id=None,
             rejection_reason=EXECUTION_DISABLED_REASON,
-            error_class="execution_disabled",
         )
 
     # ------------------------------------------------------------- client
@@ -359,9 +362,7 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
                 "session_failed",
                 "capability allowlist missing; fail-closed, no transport opened",
             )
-            raise BrokerUnavailable(
-                "allowlist_missing: run 'trading-agent broker setup'"
-            )
+            raise BrokerUnavailable("allowlist_missing: run 'trading-agent broker setup'")
         client = McpClient(
             self._broker_cfg.robinhood_mcp_url,
             token=self._token or "",
@@ -375,13 +376,12 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
 
     def _list_schemas(self, client: McpClient) -> list[ToolSchema]:
         raw = client.list_tools()
-        schemas = [
-            ToolSchema.from_api(tool) for tool in raw if tool.get("name")
-        ]
+        schemas = [ToolSchema.from_api(tool) for tool in raw if tool.get("name")]
         if not schemas:
             raise BrokerStateNotAvailable("broker listed zero tools")
         self._log_event(
-            "tools_listed", f"{len(schemas)} tools",
+            "tools_listed",
+            f"{len(schemas)} tools",
             {"tools": sorted(s.name for s in schemas)},
         )
         return schemas
@@ -461,9 +461,7 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
                     instrument_id=f"RH:{symbol.upper()}",
                     quantity=_to_decimal(row.get("quantity")) or Decimal("0"),
                     avg_price=_to_decimal(row.get("avgPrice") or row.get("avg_price")),
-                    market_value=_to_decimal(
-                        row.get("marketValue") or row.get("market_value")
-                    ),
+                    market_value=_to_decimal(row.get("marketValue") or row.get("market_value")),
                 )
             )
         return tuple(views)
@@ -507,17 +505,18 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
         capability_digest: str | None = None,
     ) -> AccountSnapshot:
         self._log_event(
-            "cycle_failed", f"{status}: {reason}",
+            "cycle_failed",
+            f"{status}: {reason}",
             {"status": status, "reason": reason},
         )
         snapshot = AccountSnapshot(
-            available=False, reason=f"{status}: {reason}", as_of=as_of,
+            available=False,
+            reason=f"{status}: {reason}",
+            as_of=as_of,
         )
         self._persist_snapshot(
             snapshot,
-            capability_digest or (
-                self._capability.digest if self._capability else None
-            ),
+            capability_digest or (self._capability.digest if self._capability else None),
             as_of,
             status=status,
         )
@@ -544,9 +543,9 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
                 positions_json=[
                     {
                         "instrument_id": p.instrument_id,
-                        "quantity": float(p.quantity),
-                        "avg_price": float(p.avg_price) if p.avg_price is not None else None,
-                        "market_value": float(p.market_value) if p.market_value is not None else None,
+                        "quantity": str(p.quantity),
+                        "avg_price": str(p.avg_price) if p.avg_price is not None else None,
+                        "market_value": str(p.market_value) if p.market_value is not None else None,
                     }
                     for p in snapshot.positions
                 ],
@@ -555,8 +554,8 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
                         "broker_order_id": o.broker_order_id,
                         "instrument_id": o.instrument_id,
                         "side": o.side,
-                        "quantity": float(o.quantity),
-                        "limit_price": float(o.limit_price) if o.limit_price is not None else None,
+                        "quantity": str(o.quantity),
+                        "limit_price": str(o.limit_price) if o.limit_price is not None else None,
                         "status": o.status,
                     }
                     for o in snapshot.open_orders
@@ -579,9 +578,7 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
         """Audit hook used by the shadow loop for unexpected exceptions."""
         self._log_event("cycle_error", detail)
 
-    def _log_event_impl(
-        self, event_type: str, detail: str | None, payload: dict | None
-    ) -> None:
+    def _log_event_impl(self, event_type: str, detail: str | None, payload: dict | None) -> None:
         if self._session is None:
             return
         self._session.execute(

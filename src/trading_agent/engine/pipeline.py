@@ -918,7 +918,8 @@ class TradingPipeline:
             open_entry_count=open_entry_count,
             day_start_nav=day_start_nav,
             high_water_mark=high_water_mark,
-            paused=False,
+            account_as_of=now,
+            paused=ReconciliationService(session, run_id, ACCOUNT_ALIAS).healthy() is not True,
         )
 
     def _historical_equity_max(self, session: Session, run_id: str) -> Decimal:
@@ -933,16 +934,16 @@ class TradingPipeline:
     def _book_equity(self, ledger: Ledger, marks: dict[str, Decimal | None]) -> Decimal | None:
         """Book NAV = cash + sum(position value at latest mark).
 
-        A position whose latest mark is unavailable contributes zero (the
-        website renders it as MISSING, never a fabricated price).
+        A missing held mark makes NAV unavailable; zero is not a valuation.
         """
         total = ledger.cash
         for instrument_id, state in ledger.positions.items():
             if state.quantity <= 0:
                 continue
             mark = marks.get(instrument_id)
-            if mark is not None:
-                total += round_money(state.quantity * mark)
+            if mark is None:
+                return None
+            total += round_money(state.quantity * mark)
         return round_money(total)
 
     # ----------------------------------------------------------------- fills

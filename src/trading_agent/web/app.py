@@ -23,10 +23,12 @@ from pathlib import Path
 from typing import Any
 
 import uvicorn
-from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 from starlette.responses import Response
 
@@ -49,14 +51,14 @@ from .queries import (
     list_runs,
 )
 
-_PUBLIC_PREFIXES = ("/static", "/auth/login")
+_PUBLIC_PREFIXES = ("/static/",)
 
 
 def _base_context(config: TradingConfig) -> dict[str, str]:
     return {
         "mode": config.app.mode.value.upper(),
         "authority": config.authority(),
-        "web_url": f"http://{config.app.web_host}:{config.app.web_port}",
+        "web_url": expected_origin(config),
         "label": config.app.mode.value.upper(),
     }
 
@@ -81,7 +83,7 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
 
     def require_auth(request: Request) -> None:
         """Fail closed: the middleware is the real gate; this is a second check."""
-        if not verify(store, request):
+        if not getattr(request.state, "authenticated", False):
             raise HTTPException(status_code=401, detail="unauthenticated")
 
     def verify(store_obj: AuthStore, request: Request) -> bool:
@@ -93,18 +95,41 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
     ) -> Response:
         if not host_matches(config, request.headers.get("host")):
             return JSONResponse(status_code=403, content={"error": "host mismatch"})
+        origin = request.headers.get("origin")
+        if origin is not None and origin != expected_origin(config):
+            return JSONResponse(status_code=403, content={"error": "origin mismatch"})
         path = request.url.path
-        if not verify(store, request):
-            if path.startswith("/api/"):
-                return JSONResponse(status_code=401, content={"error": "unauthenticated"})
-            if not any(path.startswith(prefix) for prefix in _PUBLIC_PREFIXES):
+        public = path == "/auth/login" or path.startswith("/static/")
+        request.state.authenticated = False
+        try:
+            cookie = request.cookies.get(SESSION_COOKIE)
+            if cookie and verify(store, request):
+                with open_session(engine) as session:
+                    request.state.authenticated = auth_module.session_registered(session, cookie)
+            if not public and not request.state.authenticated:
+                if path.startswith("/api/"):
+                    return JSONResponse(status_code=401, content={"error": "unauthenticated"})
                 return RedirectResponse(url="/auth/login", status_code=302)
-        return await call_next(request)
+            response = await call_next(request)
+        except SQLAlchemyError:
+            response = JSONResponse(
+                status_code=503, content={"error": "local database unavailable"}
+            )
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+            "img-src 'self' data:; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+        )
+        return response
 
     def db_session(request: Request) -> Iterator[Session]:
         """Per-request session; every handler in this app is read-only."""
         session = open_session(engine)
         try:
+            if engine.dialect.name == "postgresql":
+                session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+                session.execute(text("SET TRANSACTION READ ONLY"))
             yield session
         finally:
             session.close()
@@ -115,22 +140,26 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
 
     @app.get("/auth/login", response_class=HTMLResponse)
     async def login_page(request: Request) -> Response:
-        if verify(store, request):
+        if getattr(request.state, "authenticated", False):
             return RedirectResponse(url="/", status_code=302)
-        return templates.TemplateResponse(request, "login.html", {**base_ctx, "error": None})
+        return templates.TemplateResponse(
+            request=request, name="login.html", context={**base_ctx, "error": None}
+        )
 
     @app.post("/auth/login")
     async def login_submit(request: Request) -> Response:
         origin = request.headers.get("origin")
-        if origin is not None and origin.rstrip("/") != expected_origin(config).rstrip("/"):
+        if origin != expected_origin(config):
             return JSONResponse(status_code=403, content={"error": "origin mismatch"})
         form = await request.form()
         token = str(form.get("token", ""))
-        if not token or not hmac.compare_digest(token, store.owner_token):
+        if not token or not hmac.compare_digest(
+            token.encode("utf-8"), store.owner_token.encode("utf-8")
+        ):
             return templates.TemplateResponse(
-                request,
-                "login.html",
-                {**base_ctx, "error": "invalid owner token"},
+                request=request,
+                name="login.html",
+                context={**base_ctx, "error": "invalid owner token"},
                 status_code=403,
             )
         cookie = auth_module.issue_session(store)
@@ -152,8 +181,11 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
         )
         return response
 
-    @app.get("/auth/logout")
+    @app.post("/auth/logout")
     async def logout(request: Request) -> Response:
+        require_auth(request)
+        if request.headers.get("origin") != expected_origin(config):
+            raise HTTPException(status_code=403, detail="origin mismatch")
         cookie = request.cookies.get(SESSION_COOKIE)
         session = open_session(engine)
         try:
@@ -169,30 +201,32 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
 
     @app.get("/", response_class=HTMLResponse)
     async def page_overview(request: Request) -> Response:
-        return templates.TemplateResponse(request, "overview.html", base_ctx)
+        return templates.TemplateResponse(request=request, name="overview.html", context=base_ctx)
 
     @app.get("/activity", response_class=HTMLResponse)
     async def page_activity(request: Request) -> Response:
-        return templates.TemplateResponse(request, "activity.html", base_ctx)
+        return templates.TemplateResponse(request=request, name="activity.html", context=base_ctx)
 
     @app.get("/orders", response_class=HTMLResponse)
     async def page_orders(request: Request) -> Response:
-        return templates.TemplateResponse(request, "orders.html", base_ctx)
+        return templates.TemplateResponse(request=request, name="orders.html", context=base_ctx)
 
     @app.get("/orders/{order_id}", response_class=HTMLResponse)
     async def page_order_detail(request: Request, order_id: str) -> Response:
         return templates.TemplateResponse(
-            request, "order_detail.html", {**base_ctx, "order_id": order_id}
+            request=request, name="order_detail.html", context={**base_ctx, "order_id": order_id}
         )
 
     @app.get("/portfolio", response_class=HTMLResponse)
     async def page_portfolio(request: Request) -> Response:
-        return templates.TemplateResponse(request, "portfolio.html", base_ctx)
+        return templates.TemplateResponse(request=request, name="portfolio.html", context=base_ctx)
 
     @app.get("/instruments/{instrument_id}", response_class=HTMLResponse)
     async def page_instrument_detail(request: Request, instrument_id: str) -> Response:
         return templates.TemplateResponse(
-            request, "instrument_detail.html", {**base_ctx, "instrument_id": instrument_id}
+            request=request,
+            name="instrument_detail.html",
+            context={**base_ctx, "instrument_id": instrument_id},
         )
 
     @app.get("/learning", response_class=HTMLResponse)
@@ -271,8 +305,8 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
         request: Request,
         session: Session = SessionDep,
         run_id: str | None = None,
-        cursor: str | None = None,
-        limit: int = 20,
+        cursor: int | None = Query(default=None, ge=0),
+        limit: int = Query(default=20, ge=1, le=100),
     ) -> dict[str, Any]:
         require_auth(request)
         return get_activity(session, config, run_id, cursor=cursor, limit=limit)
@@ -366,8 +400,7 @@ def serve(config: TradingConfig, host: str | None = None, port: int | None = Non
     store = auth_module.load_store(path)
     if created:
         print(f"owner token created at {path} (chmod 600)")
-        print(f"owner token: {store.owner_token}")
-        print("store this token; it is shown only once and cannot be recovered from the file.")
+        print("Retrieve your owner token locally from the protected file; do not share it.")
     else:
         print(f"owner token exists at {path} (delete the file to re-bootstrap)")
     if host is not None or port is not None:
@@ -386,10 +419,10 @@ def serve(config: TradingConfig, host: str | None = None, port: int | None = Non
     except Exception as error:
         print(f"ERROR: {error}")
         raise SystemExit(2) from error
-    url = f"http://{config.app.web_host}:{config.app.web_port}"
+    url = expected_origin(config)
     print(f"website: {url}  (owner login at {url}/auth/login)")
     app = build_app(config, auth_store=store)
-    if not is_loopback_url(f"http://{config.app.web_host}:{config.app.web_port}"):
+    if not is_loopback_url(expected_origin(config)):
         print(
             f"ERROR: refusing to bind {config.app.web_host} (non-loopback)",
             file=sys.stderr,

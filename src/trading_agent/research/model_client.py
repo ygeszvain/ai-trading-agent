@@ -19,11 +19,14 @@ import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
-from typing import Any
+from email.message import Message
+from http.client import HTTPResponse
+from typing import Any, IO, cast
 
 from ..config.models import LLMSettings
 from ..exceptions import TradingAgentError
 from ..security.loopback import is_loopback_url
+from .sanitization import sanitize_text
 
 
 class ModelClientError(TradingAgentError):
@@ -66,6 +69,31 @@ class ModelResponse:
     usage: dict[str, Any] = field(default_factory=dict)
 
 
+class _NoRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: IO[bytes],
+        code: int,
+        msg: str,
+        headers: Message,
+        newurl: str,
+    ) -> None:
+        raise urllib.error.HTTPError(req.full_url, code, "redirect denied", headers, fp)
+
+
+def _open_local(request: urllib.request.Request, timeout: float) -> HTTPResponse:
+    if not is_loopback_url(request.full_url):
+        raise ModelClientError("non-loopback inference request denied")
+    return cast(
+        HTTPResponse,
+        urllib.request.build_opener(urllib.request.ProxyHandler({}), _NoRedirect()).open(
+            request,
+            timeout=timeout,
+        ),
+    )
+
+
 class LocalModelClient:
     """A budgeted, loopback-only OpenAI-compatible chat client (urllib; no SDK)."""
 
@@ -79,9 +107,7 @@ class LocalModelClient:
     ) -> None:
         url = (base_url or settings.base_url).rstrip("/")
         if not is_loopback_url(url):
-            raise ModelClientError(
-                f"refusing non-loopback inference endpoint: {url!r} (plan section 9)"
-            )
+            raise ModelClientError("refusing non-loopback inference endpoint")
         self._base_url = url
         self._model = model if model is not None else settings.model_id
         token = settings.auth_token
@@ -109,27 +135,24 @@ class LocalModelClient:
     def _post_json(self, path: str, payload: dict[str, Any]) -> tuple[dict[str, Any], int]:
         url = f"{self._base_url}{path}"
         if not is_loopback_url(url):  # defense in depth on every request
-            raise ModelClientError(f"refusing non-loopback inference request to {url!r}")
+            raise ModelClientError("refusing non-loopback inference request")
         body = json.dumps(payload).encode("utf-8")
         request = urllib.request.Request(url, data=body, headers=self._headers(), method="POST")
         try:
             started = time.monotonic()
-            with urllib.request.urlopen(request, timeout=self._timeout) as response:
+            with _open_local(request, timeout=self._timeout) as response:
                 latency_ms = int((time.monotonic() - started) * 1000)
-                raw = response.read().decode("utf-8", errors="replace")
-        except TimeoutError as exc:
-            raise ModelTimeoutError(
-                f"model did not respond within {self._timeout}s: {exc}"
-            ) from None
+                raw = response.read(1_048_577).decode("utf-8", errors="replace")
+        except TimeoutError:
+            raise ModelTimeoutError(f"model did not respond within {self._timeout}s") from None
         except urllib.error.HTTPError as exc:
-            detail = exc.read(512).decode("utf-8", errors="replace")
             raise ModelHttpError(
-                f"model endpoint returned {exc.code}: {detail[:256]}", status=exc.code
+                f"model endpoint returned HTTP {exc.code}", status=exc.code
             ) from None
-        except urllib.error.URLError as exc:
-            raise ModelUnreachableError(
-                f"local model endpoint unreachable ({url}): {exc.reason}"
-            ) from None
+        except urllib.error.URLError:
+            raise ModelUnreachableError("local model endpoint unreachable") from None
+        if len(raw) > 1_048_576:
+            raise ModelMalformedError("model response exceeds byte budget")
         try:
             parsed = json.loads(raw)
         except json.JSONDecodeError:
@@ -143,18 +166,18 @@ class LocalModelClient:
         url = f"{self._base_url}/models"
         request = urllib.request.Request(url, headers=self._headers(), method="GET")
         try:
-            with urllib.request.urlopen(request, timeout=min(self._timeout, 10.0)) as response:
-                data = json.loads(response.read().decode("utf-8", errors="replace"))
-        except TimeoutError as exc:
-            raise ModelTimeoutError(f"model endpoint did not respond: {exc}") from None
+            with _open_local(request, timeout=min(self._timeout, 10.0)) as response:
+                data = json.loads(response.read(1_048_577).decode("utf-8", errors="replace"))
+        except TimeoutError:
+            raise ModelTimeoutError("model endpoint did not respond") from None
         except urllib.error.HTTPError as exc:
             raise ModelHttpError(
                 f"model endpoint returned {exc.code} for /models", status=exc.code
             ) from None
-        except urllib.error.URLError as exc:
-            raise ModelUnreachableError(
-                f"local model endpoint unreachable ({url}): {exc.reason}"
-            ) from None
+        except urllib.error.URLError:
+            raise ModelUnreachableError("local model endpoint unreachable") from None
+        if not isinstance(data, dict) or not isinstance(data.get("data"), list):
+            raise ModelMalformedError("invalid model list")
         models = tuple(
             str(entry.get("id", ""))
             for entry in data.get("data", ())
@@ -174,6 +197,12 @@ class LocalModelClient:
         if self.calls_made >= self._budget:
             raise ModelBudgetError(f"per-job model call budget exhausted ({self._budget} calls)")
         self.calls_made += 1
+        system, user = sanitize_text(system)[0], sanitize_text(user)[0]
+        if self._token:
+            system, user = (
+                system.replace(self._token, "[REDACTED]"),
+                user.replace(self._token, "[REDACTED]"),
+            )
         payload: dict[str, Any] = {
             "messages": [
                 {"role": "system", "content": system},
@@ -186,13 +215,27 @@ class LocalModelClient:
             payload["model"] = self._model
         data, latency_ms = self._post_json("/chat/completions", payload)
         try:
-            text = str(data["choices"][0]["message"]["content"])
+            text = data["choices"][0]["message"]["content"]
+            if not isinstance(text, str):
+                raise ModelMalformedError("model content must be text")
+            if self._token and self._token in text:
+                raise ModelMalformedError("model echoed a private credential")
         except (KeyError, IndexError, TypeError):
             raise ModelMalformedError("model response missing choices[0].message.content") from None
-        usage = data.get("usage") if isinstance(data.get("usage"), dict) else {}
+        raw_usage = data.get("usage")
+        if not isinstance(raw_usage, dict):
+            raw_usage = {}
+        usage = {
+            k: v
+            for k, v in raw_usage.items()
+            if k in {"prompt_tokens", "completion_tokens", "total_tokens"}
+            and isinstance(v, int)
+            and not isinstance(v, bool)
+            and 0 <= v <= 10_000_000
+        }
         return ModelResponse(
             text=text,
-            model=str(data.get("model") or self._model or "unknown"),
+            model=self._model or "unknown",
             latency_ms=latency_ms,
             tokens_out=int(usage.get("completion_tokens") or 0),
             usage=usage,

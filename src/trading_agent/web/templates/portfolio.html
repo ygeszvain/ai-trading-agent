@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% set page = "portfolio" %}
 {% block content %}
 <div class="filterbar">
   <label>Run: <select data-run-select></select></label>
@@ -7,9 +8,5 @@
 <div data-summary class="cards"></div>
 <h2>Positions</h2>
 <div data-positions></div>
-<script>
-  document.querySelectorAll("[data-run-select]").forEach((el) => {
-    TA.api("/api/v1/runs").then((env) => TA.loadRuns(el)).catch(() => {});
-  });
-</script>
+
 {% endblock %}

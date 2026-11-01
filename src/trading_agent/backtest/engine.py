@@ -212,7 +212,9 @@ def run_single_book(
                 # Size on net-of-fee capacity: price*(1 + cost_rate) <= cash,
                 # otherwise the fee check below can never pass and no entry
                 # fill ever occurs.
-                candidate = (notional / (Decimal(1) + cost_rate) / mark).quantize(_QUANTITY_EXP, rounding=ROUND_DOWN)
+                candidate = (notional / (Decimal(1) + cost_rate) / mark).quantize(
+                    _QUANTITY_EXP, rounding=ROUND_DOWN
+                )
                 if candidate > 0:
                     price = candidate * mark
                     fee = round_money(price * cost_rate)
@@ -260,7 +262,9 @@ def run_passive_benchmark(
             if mark is None:
                 continue
         if quantity == 0 and series.value_on(session) is not None:
-            quantity = (cash / mark).quantize(_QUANTITY_EXP, rounding=ROUND_DOWN)
+            quantity = (cash / (mark * (Decimal(1) + cost_rate))).quantize(
+                _QUANTITY_EXP, rounding=ROUND_DOWN
+            )
             fee = round_money(quantity * mark * cost_rate)
             cash = max(Decimal("0"), cash - quantity * mark - fee)
         cash = round_money(cash * factor)
@@ -481,7 +485,7 @@ def run_backtest(
     sessions = [s for s in all_sessions if bt.range_start <= s <= bt.range_end]
     if not sessions:
         raise ValueError(
-                f"no data sessions inside {bt.range_start}..{bt.range_end}; widen the config backtest range or fetch deeper history"
+            f"no data sessions inside {bt.range_start}..{bt.range_end}; widen the config backtest range or fetch deeper history"
         )
     providers_sorted = sorted(providers.values(), key=lambda p: (p.data_snapshot_id(), p.source_id))
     instrument_ids = [
@@ -504,7 +508,7 @@ def run_backtest(
         for provider in providers_sorted
         for instrument in provider.instruments()
     ]
-    per_book_cash = bt.initial_cash_usd / Decimal(len(books))
+    per_book_cash = bt.initial_cash_usd  # curves are averaged, so each starts with the same capital
     benchmarks: list[BenchmarkResult] = []
     for provider in providers_sorted:
         for instrument in provider.instruments():
@@ -531,8 +535,8 @@ def run_backtest(
         ),
         BenchmarkResult("passive-composite", passive_composite, compute_metrics(passive_composite)),
     ]
-    has_real = any("realdata" in p.data_snapshot_id() for p in providers_sorted)
-    has_synthetic = any("synthetic" in p.data_snapshot_id() for p in providers_sorted)
+    has_real = any(not i.is_synthetic for p in providers_sorted for i in p.instruments())
+    has_synthetic = any(i.is_synthetic for p in providers_sorted for i in p.instruments())
     data_source = "mixed" if has_real and has_synthetic else ("real" if has_real else "synthetic")
     run_id = hashlib.sha256(
         (

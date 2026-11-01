@@ -26,7 +26,7 @@ import secrets
 import threading
 import time
 import urllib.parse
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
@@ -89,6 +89,7 @@ class McpOAuthClient:
     # ---------------------------------------------------------- discovery
 
     def _discover_metadata(self) -> None:
+        raise McpStateError("legacy OAuth runtime disabled pending verified integration")
         base = urllib.parse.urlparse(self._endpoint_url)
         root = f"{base.scheme}://{base.netloc}"
         candidates = [
@@ -150,6 +151,7 @@ class McpOAuthClient:
             return None
 
     def _register(self) -> str:
+        raise McpStateError("legacy OAuth runtime disabled pending verified integration")
         if self._metadata is None or not self._metadata.registration_endpoint:
             raise McpStateError(
                 "no registration endpoint advertised; cannot create an OAuth client"
@@ -162,9 +164,7 @@ class McpOAuthClient:
             "response_types": ["code"],
             "token_endpoint_auth_method": "none",  # public client + PKCE
         }
-        response = self._http.post(
-            self._metadata.registration_endpoint, json=payload, timeout=20.0
-        )
+        response = self._http.post(self._metadata.registration_endpoint, json=payload, timeout=20.0)
         if response.status_code not in (200, 201):
             raise McpStateError(
                 f"dynamic client registration failed (HTTP {response.status_code}): "
@@ -199,6 +199,7 @@ class McpOAuthClient:
         )
 
     def _refresh(self) -> None:
+        raise McpStateError("legacy OAuth runtime disabled pending verified integration")
         if self._metadata is None or self._tokens is None:
             raise McpStateError("cannot refresh: no metadata/tokens loaded")
         if not self._tokens.refresh_token:
@@ -223,7 +224,8 @@ class McpOAuthClient:
         self._tokens = CredentialStore(
             self._token_store_path, self._phrase
         ).load() or CredentialStore(self._token_store_path, self._phrase)._persist_after_refresh(
-            response.json(), self._client_id  # type: ignore[attr-defined]
+            response.json(),
+            self._client_id,  # type: ignore[attr-defined]
         )
 
     def _ensure_valid_token(self) -> None:
@@ -245,6 +247,7 @@ class McpOAuthClient:
     # ---------------------------------------------------------- MCP session
 
     def _open_transport(self) -> JsonRpcTransport:
+        raise McpStateError("legacy OAuth runtime disabled pending verified integration")
         transport = JsonRpcTransport(self._endpoint_url, http=self._http)
         try:
             transport.request(
@@ -312,7 +315,7 @@ class McpOAuthClient:
             self._transport = None
         self._http.headers.pop("Authorization", None)
 
-    def __enter__(self) -> "McpOAuthClient":
+    def __enter__(self) -> McpOAuthClient:
         return self
 
     def __exit__(self, *exc_info: object) -> None:

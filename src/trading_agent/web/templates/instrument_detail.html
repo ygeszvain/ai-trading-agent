@@ -1,10 +1,10 @@
 {% extends "base.html" %}
+{% set page = "instrument" %}
 {% block content %}
 <span data-flags-instrument class="muted">…</span>
 <div data-instrument><p class="muted">loading…</p></div>
 <h2>Recent prices</h2>
+<div data-flags-prices></div>
 <div data-prices></div>
-<script>
-  document.body.dataset.instrumentId = {{ instrument_id | tojson }};
-</script>
+
 {% endblock %}
