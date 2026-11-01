@@ -88,6 +88,30 @@ approval changes or renewals are included in this minimal check. Any additional
 read needs a concrete purpose and scope. No financial write is authorized by this
 operator-interface request or by a positive connection check.
 
+## Subsequent account inventory and private owner review
+
+The owner separately approved one read-only inventory for reconciliation
+preparation: current cash/buying power, holdings across equities/options/crypto,
+order status including advanced orders, and pending trade approvals. The check
+completed with all requested paginated collections covered within a 20-page
+per-collection budget. Raw identifiers and responses were discarded after
+producing the private chat summary. No quote/tradability call, order mutation,
+setting change or credential-file access was included. This permission is
+consumed and does not establish continuous monitoring. Separate broker reads
+are not an atomic snapshot and are not reconciliation with the local ledger.
+
+The owner also supplied requested instrument/mode choices. These are kept in a
+private, ignored, content-addressed unsigned artifact under `.data/owner-review/`
+(mode 0700 directory / 0600 files), located through `owner-request.current.json`.
+The artifact contains owner-stated decisions only, no account identifiers,
+credentials or private broker observations. It is not loaded as runtime authority.
+The earlier public unsigned worksheet remains historical. Later answers create a
+new draft version; preserve prior versions and leave unresolved decisions null.
+Do not publish private instrument choices or broker observations in source,
+fixtures, reports or logs. Account-wide risk/reconciliation must still account
+for existing holdings outside a requested single-instrument scope; this does not
+authorize selling or managing those holdings.
+
 ## Authentication and interactive owner steps
 
 The native Codex Robinhood connection succeeded during this check; the owner

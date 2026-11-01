@@ -1,9 +1,36 @@
 # Trading agent build status
 
-**Last updated:** 2026-11-01 (interactive Codex operator workflow; live disabled)
+**Last updated:** 2026-11-01 (owner-approved inventory and private pilot draft; live disabled)
 **Current financial authority:** LIVE_NOT_AUTHORIZED
 **Approved live capital:** 0 USD. The original USD 500 owner request remains unsigned and inactive; current private native-read observations are excluded from public evidence. Earlier USD 1,000 worksheets remain historical.
 **Next dependency:** Local gateway/account-scoped normalization, reconciliation and external validation; the native Codex read-only check passed, with no next numbered prompt or live activation path.
+
+## Owner-approved account inventory and private pilot draft
+
+The owner separately approved one account-scoped read-only inventory for
+reconciliation preparation. Account/portfolio, equity/option/crypto holdings,
+equity/option/crypto/advanced orders and pending approvals were read through the
+existing native Codex connection. All requested collections completed on their
+first page; no order mutation, setting change or credential-file access occurred.
+Private identifiers/raw responses were discarded after the scoped summary. No
+private observations or requested instrument choices are included in repository
+evidence. This second one-check permission is consumed; no monitoring is enabled.
+The observations do not certify atomicity, settled funds or local-ledger
+reconciliation.
+
+Recorded the owner's later instrument and bounded-autonomy preference in a
+private versioned unsigned draft, located via the ignored
+`.data/owner-review/owner-request.current.json`. The artifact contains only owner
+choices and unresolved fields, is mode 0600 under an owned 0700 directory, and
+cannot activate anything. Duration, overnight permissions and independent
+monitoring remain pending interactive owner answers. Approved live capital stays
+zero, all checked-in live settings and risk limits are unchanged, and automatic
+change class is NONE. No investment edge is inferred.
+
+Documentation-only verification: `git diff --check`; no runtime source changes or
+new tests were needed. Prior tests below retain their own scope. Actual local
+execution/signing/gateway integration, recovery/monitoring and prospective
+investment evidence remain BLOCKED or EXTERNAL_VALIDATION_PENDING.
 
 ## Interactive Codex operator workflow
 

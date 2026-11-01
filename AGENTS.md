@@ -45,6 +45,17 @@ protected-call prohibition remains outside an explicit owner request/exception.
 No real credential reads or financial writes are inferred. Do not make the chat
 the unattended engine or create schedules/alerts/deployments under this request.
 
+The owner subsequently approved one account-scoped read-only inventory for
+reconciliation preparation (cash/buying power, holdings, orders and pending
+approvals across asset classes). It completed with all requested collections
+covered; this exception is also consumed. It did not write the ledger or prove
+reconciliation. Later instrument/mode choices are in the ignored private
+`.data/owner-review/owner-request.current.json` pointer and its unsigned artifact.
+These are owner decisions, not broker credentials or authorization. Preserve
+unknown duration/overnight/monitoring fields; ask for them here without inventing
+answers. Keep the private requested universe and all broker observations out of
+public commits. Runtime capital stays zero and no live configuration is changed.
+
 ## Publication scope — November 1, 2026
 
 The owner explicitly authorized open source publication to
