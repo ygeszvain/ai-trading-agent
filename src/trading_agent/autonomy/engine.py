@@ -128,6 +128,10 @@ class AutonomousExecutor(MockExecutor):
             for o in self.store.account_orders(conn, state.account_key)
         ):
             raise Denied("working_order_conflict")
+        if envelope.closeout_policy_hash is not None:
+            from ..operations.closeout import enforce_entry_window
+
+            enforce_entry_window(conn, envelope, intent, now)
         risk = risk_check(
             state, config, intent, now, excluding_cash, excluding_entry, excluding_turnover
         )

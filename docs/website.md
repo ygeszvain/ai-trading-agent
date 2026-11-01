@@ -184,3 +184,14 @@ capability-gated command routes).
 section 24; USD 1,000 ceiling prefilled as an inactive draft), disabled
 readiness controls, unmet prerequisites always visible; activation remains
 impossible under LIVE_NOT_AUTHORIZED.
+
+## Operational evidence view (disabled)
+
+`/operations` and `/api/v1/operations` project persisted, scoped synthetic M7
+closeouts, reconciliation hashes/results and sanitized mail states. Missing
+records stay missing; real email delivery remains EXTERNAL_VALIDATION_PENDING.
+All actual controls are disabled, and control POSTs are denied server-side.
+Reads cannot invoke mail, broker or inference. The projection is bounded to 100
+records per collection and requires the existing owner session and loopback
+Host/Origin controls. See [operations readiness](operations_readiness.md) for
+PostgreSQL/browser evidence and external limitations. LIVE_NOT_AUTHORIZED.

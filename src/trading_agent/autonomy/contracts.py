@@ -110,6 +110,7 @@ class Envelope(Record):
     time_in_force: tuple[Literal["day"], ...] = ("day",)
     sessions: tuple[Session, ...] = Field(min_length=1, max_length=30)
     overnight_policy: Literal["FORBID", "EXPLICITLY_ALLOWED"] = "FORBID"
+    closeout_policy_hash: Digest | None = None
     monitoring: Monitoring
     starts_at: AwareDatetime
     expires_at: AwareDatetime

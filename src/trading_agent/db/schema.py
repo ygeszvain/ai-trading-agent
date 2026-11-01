@@ -675,3 +675,45 @@ m7_changes = Table(
     Column("document", Text, nullable=False),
 )
 M7_ALL_TABLES = (*M7_TABLES, m7_runtime, m7_monitor, m7_notices, m7_changes)
+
+# Operational evidence/outboxes are not a second financial ledger.
+ops_records = Table(
+    "ops_records",
+    metadata,
+    Column("record_id", String(64), primary_key=True),
+    Column("scope", String(64), nullable=False),
+    Column("kind", String(32), nullable=False),
+    Column("document", Text, nullable=False),
+)
+ops_mail = Table(
+    "ops_mail",
+    metadata,
+    Column("message_id", String(64), primary_key=True),
+    Column("scope", String(64), nullable=False),
+    Column("status", String(24), nullable=False),
+    Column("revision", Integer, nullable=False),
+    Column("document", Text, nullable=False),
+)
+ops_mail_attempts = Table(
+    "ops_mail_attempts",
+    metadata,
+    Column("consent_hash", String(64), nullable=False),
+    Column("attempt_id", String(64), primary_key=True),
+    Column("message_id", String(64), ForeignKey("ops_mail.message_id"), nullable=False),
+    Column("document", Text, nullable=False),
+)
+ops_closeouts = Table(
+    "ops_closeouts",
+    metadata,
+    Column("job_id", String(64), primary_key=True),
+    Column("scope", String(64), nullable=False),
+    Column("document", Text, nullable=False),
+)
+ops_monitors = Table(
+    "ops_monitors",
+    metadata,
+    Column("scope", String(64), primary_key=True),
+    Column("document", Text, nullable=False),
+)
+OPS_TABLES = (ops_records, ops_mail, ops_mail_attempts, ops_closeouts, ops_monitors)
+M7_ALL_TABLES = (*M7_ALL_TABLES, *OPS_TABLES)

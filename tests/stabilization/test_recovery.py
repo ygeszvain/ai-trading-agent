@@ -35,7 +35,7 @@ def test_fresh_migration_matches_contract_and_preserves_legacy_provenance(databa
         )
         conn.execute(text("CREATE TABLE unrelated_witness(value TEXT)"))
         conn.execute(text("INSERT INTO unrelated_witness VALUES ('preserve')"))
-    assert run_migrations(cfg) == "f4b020261101"
+    assert run_migrations(cfg) == "a61120261101"
     verify_schema(cfg)
     with engine.connect() as conn:
         assert (
@@ -55,7 +55,6 @@ def test_fresh_migration_matches_contract_and_preserves_legacy_provenance(databa
         command.downgrade(_alembic_config(cfg), "e71a4c09d522")
     verify_schema(cfg)  # refused downgrade is transactional
     engine.dispose()
-
 
 
 @pytest.mark.parametrize(

@@ -262,3 +262,24 @@ decisions and investment evidence remain pending. Setup never activates live mod
 For a bug report, include the commit, Python/uv versions, exact command, synthetic
 configuration differences, and a sanitized error summary. Exclude tokens, owner
 identity data, account numbers, private datasets, and full logs.
+
+## Disabled operational-readiness verification
+
+```sh
+uv run trading-agent operations demo --out-dir .data/operations-review
+uv run trading-agent operations report
+```
+
+The demo creates a fresh synthetic journal/report, confirms a mock pre-close exit,
+and preserves ambiguous fixture mail without resending. It needs no PostgreSQL,
+model, mail credential or broker connection. The generic report has no inferred
+evidence and therefore reports unverified fields BLOCKED; neither activates.
+Normal migrations now include `a61120261101` and retain operational evidence.
+The authenticated `/operations` page reads only scoped persisted fixture records;
+a file-based demo does not automatically import itself into the website database.
+
+See [the complete operational evidence matrix](docs/operations_readiness.md) for
+376-test PostgreSQL verification and [owner Gmail instructions](docs/email_owner_setup.md)
+for private one-message external acceptance. No worker/service, scheduler or
+actual delivery is enabled by setup. Do not give Codex credentials or run a real
+mail/broker test as part of the demo. Financial authority: LIVE_NOT_AUTHORIZED.

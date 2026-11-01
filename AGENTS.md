@@ -59,6 +59,21 @@ end-of-day execution policy, independent delivery, response drills and escalatio
 details remain unresolved. Keep the private requested universe and all broker observations out of
 public commits. Runtime capital stays zero and no live configuration is changed.
 
+## Owner-selected operational repairs — November 1, 2026
+
+The owner explicitly selected email alerts, pre-close exits, reconciliation and
+execution readiness while keeping trading disabled. Offline scope and actual
+376-test/Ruff/mypy/browser results are in docs/operations_readiness.md. Gmail
+same sender/recipient is selected privately; do not ask again or publish the
+address. Owner-run credential setup, one-message consent/receipt and independent
+monitor deployment are separate external checks in docs/email_owner_setup.md.
+Coding must not retrieve Keychain items or run real mail/broker tests. No mail,
+service, schedule or live authority was activated. Mock closeout timing proposals
+remain unapproved for real use; official gateway normalization, deployed health
+publishing, real reconciliation/executor/signing and prospective evidence remain
+pending. Do not infer authorization from this software repair or synthetic mail
+acknowledgment. The numbered prompt pack still ends at 12.
+
 ## Publication scope — November 1, 2026
 
 The owner explicitly authorized open source publication to

@@ -8,8 +8,9 @@ and reconciliation services govern financial behavior.
 **Experimental development snapshot — November 1, 2026.** The repository includes
 simulation, backtesting, economic evaluation, research, gateway scaffolding,
 learning experiments, and an authenticated local website. These components are
-at different stages of verification. The offline stabilization check passes 325 tests, full Ruff, and mypy; see the
-[current repair report](docs/stabilization_and_auth_readiness.md) and historical
+at different stages of verification. Current offline verification passes 376 tests, full Ruff and mypy; see the
+[operations repair report](docs/operations_readiness.md),
+[earlier stabilization report](docs/stabilization_and_auth_readiness.md) and historical
 [publication baseline](docs/publication_status.md). Actual live readiness remains blocked.
 
 Prompt 9's research-only learning workflow is now implemented in this source
@@ -33,6 +34,13 @@ are zero per-intent application approvals in that fixture. The read-only
 stays absent; the automatic change class is `NONE`, and promotion only prepares
 review evidence. No activation, renewal or real dispatch is implemented.
 
+The separately selected [operations-readiness repairs](docs/operations_readiness.md)
+add durable incident mail, a separate health monitor, frozen pre-close controls,
+exact persisted reconciliation and the read-only `/operations` page. Run
+`uv run trading-agent operations demo` without credentials or external services.
+[Owner-only Gmail setup](docs/email_owner_setup.md) is separate: real delivery,
+monitor deployment and broker integration remain externally unverified.
+
 **Financial authority: LIVE_NOT_AUTHORIZED. Approved live capital: USD 0.**
 Profitability is an unproven research hypothesis. Synthetic reports demonstrate
 software behavior and do not establish an investment edge. This is research
@@ -46,7 +54,7 @@ provision it if necessary. Installing dependencies needs network access; the
 synthetic commands below require no broker, model server, data key, or database.
 
 ```bash
-git clone --branch codex/offline-stabilization https://github.com/ygeszvain/ai-trading-agent.git
+git clone --branch codex/operations-readiness https://github.com/ygeszvain/ai-trading-agent.git
 cd ai-trading-agent
 uv sync --locked
 uv run trading-agent --help

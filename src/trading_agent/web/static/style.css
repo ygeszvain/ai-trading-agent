@@ -67,3 +67,6 @@ body[data-page="learning"] .research-table:focus-visible { outline: 2px solid va
 body[data-page="readiness"] .research-table { overflow-x: auto; margin: 12px 0; }
 body[data-page="readiness"] .research-table:focus-visible { outline: 2px solid var(--accent); }
 body[data-page="autonomy"] p { overflow-wrap: anywhere; }
+
+/* Keep exact operational evidence hashes readable on narrow screens. */
+body[data-page="operations"] p, body[data-page="operations"] h1 { overflow-wrap: anywhere; }

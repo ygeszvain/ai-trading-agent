@@ -1,9 +1,40 @@
 # Trading agent build status
 
-**Last updated:** 2026-11-01 (owner incident responder confirmed privately; live disabled)
+**Last updated:** 2026-11-01 (disabled operational implementation verified; external checks pending)
 **Current financial authority:** LIVE_NOT_AUTHORIZED
 **Approved live capital:** 0 USD. The original USD 500 owner request remains unsigned and inactive; current private native-read observations are excluded from public evidence. Earlier USD 1,000 worksheets remain historical.
-**Next dependency:** Local gateway/account-scoped normalization, reconciliation and external validation; the native Codex read-only check passed, with no next numbered prompt or live activation path.
+**Next dependency:** Owner-operated Gmail delivery/response and independent monitoring; official gateway normalization/account binding and real reconciliation; executor/signing and approved pilot policy. No next numbered prompt or live activation path.
+
+## Owner-selected operational implementation and verification
+
+Completed the separately requested offline repair scope for email, pre-close
+exits, reconciliation and execution-readiness reporting. See
+[operations_readiness.md](operations_readiness.md) for implementation, material-risk
+matrix, exact commands, failed evidence and limitations, and
+[email_owner_setup.md](email_owner_setup.md) for owner-only external acceptance.
+
+Actual verification: full suite with four dedicated disposable PostgreSQL opt-ins
+**376 passed, one dependency deprecation warning, 65.91s**; full Ruff and mypy
+(**135 files**) PASS. Normal migration head `a61120261101`, empty roundtrip and
+populated downgrade refusal pass. Deterministic demo confirms synthetic flat,
+`999.98` after two fixture fees, zero duplicates, accepted/unknown fixture mail
+without ambiguous resend, and an independently detected missing executor.
+Authenticated persisted PostgreSQL browser checks pass desktop/narrow layout,
+three disabled controls, four denied writes, run/Origin isolation, zero page
+errors/external requests. No real mail, broker, model or credential call occurred.
+Only owned disposable services/browser were used and stopped; private logs and
+failed intermediate evidence are retained locally.
+
+Owner Gmail same-sender/recipient choice is retained in a new versioned private
+unsigned draft and disabled email template; personal settings remain excluded
+from public source. Proposed 30/20/15/5-minute pre-close cutoffs are mock evidence,
+not approved real policy. Start/expiry/signature remain null, requested financial
+scope unapplied, live capital zero, auto change class NONE. Same-user filesystem
+permissions still do not establish privileged isolation. Actual Gmail receipt,
+response/escalation, deployment, broker behavior/account-bound reconciliation,
+real executor/signing and prospective investment evidence remain pending or
+BLOCKED. Earlier sections below are historical evidence, not current completion
+claims. Current financial authority: **LIVE_NOT_AUTHORIZED**.
 
 ## Owner incident responder confirmed
 

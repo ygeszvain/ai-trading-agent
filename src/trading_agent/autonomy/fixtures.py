@@ -19,7 +19,14 @@ NOW = datetime(2026, 11, 2, 15, tzinfo=UTC)
 KEY = digest("M7 fictional account, not a brokerage identity")
 
 
-def seed_fixture(store: Store, root: Path, now: datetime = NOW) -> tuple[State, Envelope, Champion]:
+def seed_fixture(
+    store: Store,
+    root: Path,
+    now: datetime = NOW,
+    *,
+    closeout_policy_hash: str | None = None,
+    session_schedule: tuple[Session, ...] | None = None,
+) -> tuple[State, Envelope, Champion]:
     store.create_fixture_schema()
     base = state_fixture(now)
     raw = json.loads(base.config_json)
@@ -83,7 +90,8 @@ def seed_fixture(store: Store, root: Path, now: datetime = NOW) -> tuple[State, 
         database_schema_hash=schema_hash(store.engine),
         tool_schema_hash=digest("fictional-equity-tools-v1"),
         permissions_hash=digest("fictional-account-equity-limits-only"),
-        sessions=tuple(
+        sessions=session_schedule
+        or tuple(
             Session(
                 session_id="fixture-session-" + str(i + 1),
                 opens_at=now + timedelta(days=i),
@@ -96,6 +104,7 @@ def seed_fixture(store: Store, root: Path, now: datetime = NOW) -> tuple[State, 
         expires_at=now + timedelta(days=2, hours=7),
         protective_expires_at=now + timedelta(days=2, hours=8),
         rollback_target=champion_hash,
+        closeout_policy_hash=closeout_policy_hash,
     )
     state = base.changed(
         domain="M7_MOCK_ONLY",

@@ -463,6 +463,34 @@ def build_parser() -> argparse.ArgumentParser:
 
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    operations = subparsers.add_parser(
+        "operations", help="Disabled operational readiness and owner email procedures"
+    )
+    operations.add_argument(
+        "action",
+        choices=(
+            "demo",
+            "report",
+            "email-prepare",
+            "email-prepare-monitor",
+            "email-test",
+            "email-status",
+            "email-worker",
+            "email-ack",
+            "email-resolve",
+        ),
+    )
+    operations.add_argument("--out-dir", type=Path, default=Path(".data/operations"))
+    operations.add_argument("--runtime-dir", type=Path)
+    operations.add_argument("--message-id")
+    operations.add_argument("--owner-reference")
+    operations.add_argument(
+        "--continuous",
+        action="store_true",
+        help="Owner-run independent email monitor; never enables trading",
+    )
+    operations.set_defaults(func=_run_operations)
+
     auth = subparsers.add_parser("owner-auth", help="Approved local owner login; no trading")
     auth.add_argument("action", choices=("login", "status", "discover"))
     auth.add_argument("--runtime-dir", type=Path, required=True)
@@ -603,6 +631,55 @@ def build_parser() -> argparse.ArgumentParser:
     )
     serve_parser.set_defaults(func=_run_serve)
     return parser
+
+
+def _run_operations(args: argparse.Namespace) -> int:
+    if args.action == "demo":
+        from ..operations.demo import run_demo
+
+        print(json.dumps(run_demo(args.out_dir), indent=2))
+        return 0
+    if args.action == "report":
+        from ..operations.readiness import Evidence, readiness
+
+        print(json.dumps(readiness(Evidence()), indent=2))
+        return 0
+    from sqlalchemy.exc import SQLAlchemyError
+
+    from ..owner_runtime.auth import AuthError
+    from ..owner_runtime.email import email_command
+
+    if args.runtime_dir is None:
+        print("Owner runtime directory required; no email sent.", file=sys.stderr)
+        return 2
+    if args.continuous and args.action != "email-worker":
+        print("Continuous mode is restricted to the owner email monitor.", file=sys.stderr)
+        return 2
+    try:
+        import time
+
+        previous_result = None
+        while True:
+            result = email_command(
+                args.action.removeprefix("email-"),
+                args.runtime_dir,
+                message_id=args.message_id,
+                owner_reference=args.owner_reference,
+            )
+            serialized = json.dumps(result, indent=2)
+            if not args.continuous or serialized != previous_result:
+                print(serialized, flush=True)
+            previous_result = serialized
+            if not args.continuous:
+                return 0
+            time.sleep(5)
+    except (AuthError, OSError, ValueError, SQLAlchemyError):
+        print(
+            "Owner email setup/check unavailable; verify private settings, exact consent "
+            "and protected credential provisioning. No trading activated.",
+            file=sys.stderr,
+        )
+        return 2
 
 
 def _run_owner_auth(args: argparse.Namespace) -> int:

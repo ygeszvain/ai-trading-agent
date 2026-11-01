@@ -354,6 +354,44 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
         require_auth(request)
         raise HTTPException(status_code=403, detail="LIVE_NOT_AUTHORIZED: controls unavailable")
 
+    @app.get("/operations", response_class=HTMLResponse)
+    async def page_operations(
+        request: Request, session: Session = SessionDep, run_id: str | None = None
+    ) -> Response:
+        from ..operations.view import project
+
+        require_auth(request)
+        try:
+            view = project(session.connection(), config, run_id)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=503, detail="Operational evidence integrity failure"
+            ) from error
+        return templates.TemplateResponse(
+            request=request, name="operations.html", context={**base_ctx, "view": view}
+        )
+
+    @app.get("/api/v1/operations")
+    async def api_operations(
+        request: Request, session: Session = SessionDep, run_id: str | None = None
+    ) -> dict[str, Any]:
+        from ..operations.view import project
+
+        require_auth(request)
+        try:
+            return project(session.connection(), config, run_id)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=503, detail="Operational evidence integrity failure"
+            ) from error
+
+    @app.post("/api/v1/operations/{action}")
+    async def denied_operations_control(request: Request, action: str) -> Response:
+        require_auth(request)
+        raise HTTPException(
+            status_code=403, detail="LIVE_NOT_AUTHORIZED: operational controls unavailable"
+        )
+
     # --------------------------------------------------------------- api
 
     @app.get("/api/v1/health")

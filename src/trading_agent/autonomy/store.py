@@ -187,6 +187,19 @@ class Store(Journal):
             ),
         )
         state = self.save(conn, state.changed(paused=True, resumed=False))
+        from ..operations.email import Notice, enqueue
+
+        enqueue(
+            conn,
+            Notice(
+                domain="FIXTURE",
+                scope=state.account_key,
+                incident_hash=key,
+                run_id=state.run_id,
+                code="CONTROL_INCIDENT",
+                at=at,
+            ),
+        )
         self.event(conn, state, at, "m7_incident_escalation_queued", notice)
         return key
 

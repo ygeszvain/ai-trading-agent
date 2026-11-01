@@ -135,3 +135,13 @@ controls](https://lmstudio.ai/docs/developer/core/authentication); this work did
 not change global settings or provision model secrets.
 
 **Current financial authority: LIVE_NOT_AUTHORIZED.**
+
+## Operational mail and reconciliation repairs
+
+The independent application still lacks an activated real transport. The
+[operational repair report](operations_readiness.md) now documents exact offline
+inventory/ledger comparison, pre-close controls, incident outbox and monitor
+verification. These do not consume the native connection's expired one-check
+permission. For Gmail, follow [the separate owner-only guide](email_owner_setup.md);
+email commands never read `oauth.json` or require a broker token. Current
+financial authority: LIVE_NOT_AUTHORIZED.

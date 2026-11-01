@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% set page = "operations" %}
+{% block content %}
+<h1>Operations readiness — LIVE_NOT_AUTHORIZED</h1>
+<p>Read-only persisted simulation evidence. Approved live capital: USD 0. Real execution: {{ view.real_execution }}.</p>
+<p>Source: {{ view.source }} · Run: {{ view.run_id or "UNKNOWN" }} · Mode: {{ view.mode }}.</p>
+<p>Email delivery: {{ view.external_email_delivery }}. SMTP acceptance does not prove inbox receipt. Mock acknowledgement is not real delivery evidence.</p>
+<p>Pre-close phases require fresh reconciled holdings. A planned exit, a cancellation request or an email does not prove liquidation.</p>
+<p>{{ view.coverage }}</p>
+<h2>Pre-close jobs</h2>
+{% for job in view.closeouts %}<p>{{ job.job_id }} — {{ job.phase }}</p>{% else %}<p>No scoped closeout evidence.</p>{% endfor %}
+<h2>Incident mail attempts</h2>
+{% for message in view.mail %}<p>{{ message.code }} — {{ message.status }} · {{ message.message_id }}</p>{% else %}<p>No scoped mail evidence.</p>{% endfor %}
+<h2>Reconciliation comparisons</h2>
+{% for report in view.reconciliations %}<details><summary>{{ report.as_of }} — {{ "consistent" if report.consistent else "needs review" }}</summary><pre>{{ report | tojson(indent=2) }}</pre></details>{% else %}<p>No scoped reconciliation evidence. Missing is not healthy.</p>{% endfor %}
+<fieldset disabled><legend>Actual controls unavailable</legend><button>Activate</button><button>Send email</button><button>Execute closeout</button></fieldset>
+{% endblock %}
