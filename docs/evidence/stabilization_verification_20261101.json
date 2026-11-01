@@ -1,0 +1,35 @@
+{
+  "date": "2026-11-01",
+  "authority": "LIVE_NOT_AUTHORIZED",
+  "scope": "synthetic disposable fixtures only",
+  "credential_pattern_review_paths": 239,
+  "credential_pattern_findings": [
+    {
+      "path": "tests/security/test_boundaries.py",
+      "category": "credential_url"
+    }
+  ],
+  "financial_defaults": "live disabled, capital zero, cloud disabled; live template startup denied",
+  "archived_failed_test_source_sha256_verified": true,
+  "restore_table_count": 44,
+  "restore_table_counts_match": true,
+  "restore_strategy_high_water_marks_match": true,
+  "high_water_mark_method": "max persisted strategy equity per run (reconstructed)",
+  "restored_hwm": [
+    {
+      "run_id": "sim-7c59193abae1c584",
+      "hwm": "101576.38120949"
+    },
+    {
+      "run_id": "sim-9342bacdbda13687",
+      "hwm": "507.77790481"
+    }
+  ],
+  "full_suite": "325 passed, 1 deprecation warning, 54.80s",
+  "ruff": "PASS",
+  "mypy": "PASS, 124 source files",
+  "real_broker_authentication_performed": false,
+  "protected_mcp_request_performed": false,
+  "financial_mutations_performed": false,
+  "live_dispatch_implemented": false
+}

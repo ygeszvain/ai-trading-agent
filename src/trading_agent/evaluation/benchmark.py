@@ -10,8 +10,11 @@ the *same* ConservativeExecutionModel the strategy uses.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass, field
+from datetime import date
 from decimal import Decimal
+from typing import Any
 
 from trading_agent.evaluation.accounting import AccountingEngine
 from trading_agent.evaluation.execution_model import (
@@ -20,6 +23,7 @@ from trading_agent.evaluation.execution_model import (
     OrderSide,
     OrderType,
     PendingQueue,
+    SessionObservation,
     base_price,
 )
 from trading_agent.evaluation.metrics import PerformanceMetrics, compute_metrics
@@ -30,11 +34,11 @@ class BenchmarkResult:
     benchmark_symbol: str
     metrics: PerformanceMetrics
     final_nav: Decimal
-    observations: dict = field(default_factory=dict)  # not part of comparison
+    observations: dict[str, Any] = field(default_factory=dict)  # not part of comparison
 
 
 def run_benchmark(
-    observations: dict[str, dict],
+    observations: Mapping[str, Mapping[date, SessionObservation]],
     benchmark_symbol: str,
     capital: Decimal,
     execution: ConservativeExecutionModel,

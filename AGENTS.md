@@ -6,6 +6,24 @@ Build a single-owner local research/trading application. Codex develops the soft
 
 Prompt 1 (M0) acceptance is recorded as of 2026-10-31. On 2026-11-01 the owner explicitly selected Prompt 9's research-only learning work despite unresolved earlier acceptance. Its local offline implementation and limitations are recorded in docs/build_status.md and docs/research_learning.md. This does not certify M1–M5 or authorize live promotion. Prompt 10's offline security review is complete with concrete patches and an evidence matrix in docs/security_readiness_review.md; overall readiness remains FAIL. Prompt 11's M6 control/mock scope is recorded in docs/supervised_readiness.md with a concrete unsigned package. The explicitly selected Prompt 12 M7/M8 control scope is recorded in docs/bounded_autonomy_readiness.md and its unsigned owner worksheet. Real readiness remains blocked: no live transport, real owner envelope, activation, automatic renewal or automatic promotion exists; permitted automatic change class is NONE. The numbered pack ends at Prompt 12. Stop for owner review and separately selected upstream repairs; do not infer new activation authority. Inspect docs/build_status.md before claiming progress.
 
+## Owner-selected offline stabilization — November 1, 2026
+
+The owner's later request selected prerequisite repairs without live activation.
+See docs/stabilization_and_auth_readiness.md for schema/ledger/recovery/evaluation/
+website fixes and the 325-test, Ruff and mypy results. Original failed economic
+evidence and unchanged protocol are archived under docs/evidence; do not discard
+or relabel synthetic results as investment evidence. Historical milestone reports
+remain intact. The owner reports an existing Agentic account and USD 500, with
+balance-only risk preference and a request for the best algorithm. These are in
+docs/pilot500_owner_request.unsigned.json, inactive and unverified; no best strategy
+is established, no risk widening or exact owner decisions are inferred.
+
+Official owner-auth/schema discovery is prepared for a separate required OS user
+only; docs/owner_runtime_setup.md describes the private operator steps. Coding
+must not authenticate, read real tokens or perform protected account/broker calls.
+No real login, live transport, owner signer/activation loader or deployed privilege
+isolation is certified. Current financial authority stays LIVE_NOT_AUTHORIZED.
+
 ## Publication scope — November 1, 2026
 
 The owner explicitly authorized open source publication to

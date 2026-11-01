@@ -21,6 +21,7 @@ import json
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 from decimal import Decimal
+from typing import Any, Protocol
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -34,6 +35,15 @@ from .model_client import ModelClientError, ModelResponse
 from .prompts import PROMPT_VERSIONS, ResearchBrief, build_prompt
 
 MAX_RESPONSE_CHARS = 4000
+
+
+class AdvisoryClient(Protocol):
+    calls_made: int
+
+    @property
+    def model(self) -> str | None: ...
+
+    def complete(self, system: str, user: str, *, max_tokens: int = 512) -> ModelResponse: ...
 
 
 @dataclass
@@ -68,7 +78,7 @@ def run_job(
     session_start: datetime,
     decision_ts: datetime,
     provider: SyntheticMarketProvider,
-    client,
+    client: AdvisoryClient,
     prompt_version: str = "v1",
 ) -> JobSummary:
     """Execute one research job for a session, committing per evaluation.
@@ -79,12 +89,18 @@ def run_job(
     """
     if prompt_version not in PROMPT_VERSIONS:
         raise ValueError(f"unknown research prompt version: {prompt_version!r}")
+    if not config.research.enabled:
+        raise ValueError("advisory research is disabled in this profile")
     canonical_config = config.model_dump_json(indent=None)
     config_digest = hashlib.sha256(canonical_config.encode("utf-8")).hexdigest()[:32]
     source_id = "local_model"
-    job_id = job_id_for(run_id, session_date, source_id, prompt_version)
+    job_id = (
+        job_id_for(run_id, session_date, source_id, prompt_version)
+        + "-"
+        + _digest(config_digest, client.model or "unknown")[:8]
+    )
 
-    instruments = json.loads(config.paper.synthetic_fixture_universe)
+    instruments = config.paper.synthetic_fixture_universe
     existing = session.execute(
         select(research_jobs.c.status).where(research_jobs.c.job_id == job_id)
     ).first()
@@ -113,7 +129,7 @@ def run_job(
         selected = [inst for inst in selected if inst not in existing_evals]
 
     now = datetime.now(UTC)
-    if existing is None and selected:
+    if existing is None:
         session.execute(
             research_jobs.insert().values(
                 job_id=job_id,
@@ -124,8 +140,9 @@ def run_job(
                 prompt_version=prompt_version,
                 config_digest=config_digest,
                 status="running",
-                calls_budget=config.research.monthly_call_budget,
+                calls_budget=config.llm.max_calls_per_research_job,
                 evaluations_count=0,
+                created_at=now,
                 started_at=now,
             )
         )
@@ -168,6 +185,10 @@ def run_job(
         deterministic = _deterministic_decision(
             session, run_id, instrument_id, session_start, decision_ts
         )
+        validation = {"ok": "valid", "invalid_output": "invalid", "model_error": "unavailable"}[
+            evaluated.output_status
+        ]
+        sanitized = evaluated.structured or {"text": evaluated.response_text}
         session.execute(
             research_evaluations.insert().values(
                 eval_id=eval_id,
@@ -178,18 +199,14 @@ def run_job(
                 data_snapshot_id=brief.data_snapshot_id,
                 model_id=response.model if response is not None else client.model,
                 prompt_version=prompt_version,
-                validation_status=evaluated.validation_status,
-                action=evaluated.sanitized.get("action") if evaluated.sanitized else None,
-                weight=evaluated.sanitized.get("weight") if evaluated.sanitized else None,
-                rationale=(
-                    str(evaluated.sanitized.get("rationale"))[:1024]
-                    if evaluated.sanitized and evaluated.sanitized.get("rationale")
-                    else None
-                ),
-                sanitized_response=evaluated.sanitized or {},
+                validation_status=validation,
+                action=None,  # advisory views are not trading instructions
+                weight=None,
+                rationale=evaluated.response_text[:1024] if evaluated.response_text else None,
+                sanitized_response=sanitized,
                 response_digest=_digest(
-                    evaluated.validation_status,
-                    json.dumps(evaluated.sanitized or {}, sort_keys=True),
+                    validation,
+                    json.dumps(sanitized, sort_keys=True),
                 ),
                 response_chars=len(evaluated.response_text or ""),
                 strategy_action=deterministic[0],
@@ -257,7 +274,7 @@ def _select_instruments(
     run_id: str,
     session_start: datetime,
     decision_ts: datetime,
-    instruments: dict[str, tuple[str, str]],
+    instruments: list[str],
     *,
     limit: int,
 ) -> list[str]:
@@ -274,7 +291,10 @@ def _select_instruments(
     seen: dict[str, tuple[str, Decimal | None]] = {}
     for instrument_id, action, weight in rows:
         if instrument_id in instruments:
-            seen[instrument_id] = (action, weight)
+            seen[str(instrument_id)] = (
+                str(action),
+                Decimal(str(weight)) if weight is not None else None,
+            )
     ordered = sorted(
         seen, key=lambda instrument_id: (seen[instrument_id][0] == "HOLD", instrument_id)
     )
@@ -298,10 +318,12 @@ def _build_brief(
     )
     if quote is None and not closes:
         return None
-    instruments = json.loads(config.paper.synthetic_fixture_universe)
-    symbol, asset_class = instruments.get(instrument_id, (instrument_id, "unknown"))
+    instrument = next(i for i in provider.instruments() if i.instrument_id == instrument_id)
+    symbol, asset_class = instrument.symbol, instrument.asset_class
     snapshot = _last_snapshot(session, run_id, session_start, decision_ts)
-    action, weight = _deterministic_decision(session, run_id, instrument_id, session_date)
+    action, weight = _deterministic_decision(
+        session, run_id, instrument_id, session_start, decision_ts
+    )
     age = (
         provider.sessions_since_observation(instrument_id, decision_ts)
         if quote is not None
@@ -313,9 +335,9 @@ def _build_brief(
         asset_class=asset_class,
         is_synthetic=True,
         session_date=session_date,
-        data_snapshot_id=provider.data_snapshot_id,
+        data_snapshot_id=provider.data_snapshot_id(),
         generator_version=FIXTURE_MODEL_VERSION,
-        session_closes=closes,
+        session_closes=tuple((close.session, close.close) for close in closes),
         last_quote_price=quote.price if quote is not None else None,
         quote_as_of=quote.as_of if quote is not None else None,
         quote_age_sessions=None if age is None or age < 0 else age,
@@ -330,7 +352,7 @@ def _build_brief(
 
 def _last_snapshot(
     session: Session, run_id: str, session_start: datetime, decision_ts: datetime
-) -> dict:
+) -> dict[str, Any]:
     row = session.execute(
         select(
             portfolio_snapshots.c.equity,
@@ -353,7 +375,7 @@ def _last_snapshot(
     return {
         "equity": equity,
         "cash": cash,
-        "positions": positions if isinstance(positions, dict) else json.loads(positions or "{}"),
+        "positions": json.loads(positions) if isinstance(positions, str) else positions or [],
     }
 
 

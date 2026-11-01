@@ -24,6 +24,7 @@ from pathlib import Path
 
 from .. import __version__
 from ..backtest.engine import (
+    EXECUTION_VERSION,
     BookSettings,
     CloseSeries,
     MomentumRule,
@@ -131,12 +132,13 @@ def _fit_rule(
     for rule in grid:
         if budget["remaining"] <= 0:
             raise RuntimeError(
-                    f"grid budget exhausted after {budget['spent']} runs; raise the protocol budget or narrow the grid"
+                f"grid budget exhausted after {budget['spent']} runs; raise the protocol "
+                f"budget or narrow the grid"
             )
         budget["spent"] += 1
         budget["remaining"] -= 1
         run = run_single_book(series, train_sessions, rule, book, instrument_id=instrument_id)
-        score = run.metrics.get(score_name, Decimal("0"))
+        score = Decimal(str(run.metrics.get(score_name, Decimal("0"))))
         if score > best_score:
             best_rule, best_score = rule, score
     return best_rule, best_score
@@ -168,12 +170,12 @@ def _fold_outcome(
     if budget["remaining"] < 0:
         raise RuntimeError("grid budget exceeded during test folds; widen the protocol budget")
     passive_curve = run_passive_benchmark(
-        series, fold, book.initial_cash, book.cash_yield_annual, book.cost
+        series, fold, book.initial_cash, book.cash_yield_annual, book.cost, book.quantity_step
     )
     cash_curve = run_cash_benchmark(fold, book.initial_cash, book.cash_yield_annual)
-    strategy_metrics = compute_metrics(strategy.curve)
-    passive_metrics = compute_metrics(passive_curve)
-    cash_metrics = compute_metrics(cash_curve)
+    strategy_metrics = compute_metrics(strategy.curve, book.initial_cash)
+    passive_metrics = compute_metrics(passive_curve, book.initial_cash)
+    cash_metrics = compute_metrics(cash_curve, book.initial_cash)
     edge: Decimal | None = None
     if strategy_metrics and passive_metrics:
         edge = _q(
@@ -215,7 +217,8 @@ def _decide(
         return (
             EvalVerdict.REJECT,
             (
-                    f"insufficient sample: {sample_sessions} < {protocol.min_sample_sessions} sessions — rejected for data reasons, not performance reasons",
+                f"insufficient sample: {sample_sessions} < {protocol.min_sample_sessions} "
+                f"sessions — rejected for data reasons, not performance reasons",
             ),
             {},
         )
@@ -273,18 +276,23 @@ def _decide(
         rationale.append(
             "all registered gates pass: "
             + ", ".join(f"{name} ok" for name in gates)
-                + f" (mean edge {aggregate['mean_fold_edge']}, positive share {aggregate['positive_fold_share']})"
+            + (
+                f" (mean edge {aggregate['mean_fold_edge']}, "
+                f"positive share {aggregate['positive_fold_share']})"
+            )
         )
         if data_source != "real":
             verdict = EvalVerdict.CONTINUE_RESEARCH
             rationale.append(
-                f"capped at CONTINUE_RESEARCH: data source '{data_source}' — synthetic data cannot establish trading performance"
+                f"capped at CONTINUE_RESEARCH: data source '{data_source}' — synthetic "
+                f"data cannot establish trading performance"
             )
         return verdict, tuple(rationale), aggregate
     failed = ", ".join(f"{name} FAIL" for name, passed in gates.items() if not passed)
     rationale.append(
         f"noisy or incomplete edge: {failed} (mean {aggregate['mean_fold_edge']}, "
-            f"positive share {aggregate['positive_fold_share']}, stable share {aggregate['robust_stable_share']})"
+        f"positive share {aggregate['positive_fold_share']}, stable share "
+        f"{aggregate['robust_stable_share']})"
     )
     return EvalVerdict.CONTINUE_RESEARCH, tuple(rationale), aggregate
 
@@ -437,12 +445,15 @@ def evaluate_protocol(
         "cost_drag_per_fold": str(cost_drag),
         "breakeven_edge_vs_cash": str(_q(cost_drag)),
         "note": (
-            f"break-even edge is the per-fold return needed just to cover modelled costs (fee + slippage assumptions, not observed fills)"
+            "break-even edge is the per-fold return needed just to cover modelled costs "
+            "(fee + slippage assumptions, not observed fills)"
         ),
     }
     if complete:
-        cost_view["cost_vs_mean_edge"] = str(_q(mean_edge - cost_drag))
+        cost_view["net_edge_vs_passive"] = str(mean_edge)
+        cost_view["cost_accounting"] = "fold returns already include costs; no second subtraction"
     limitations: list[str] = [
+        f"Execution model {EXECUTION_VERSION}; prior same-close evidence is not comparable.",
         "no live actions: this report is research measurement only",
         "costs are modelled assumptions (fee + slippage per fill notional), not observed fills",
     ]
@@ -454,14 +465,27 @@ def evaluate_protocol(
         limitations.append(f"small sample: {len(sessions)} sessions; prospective evidence required")
     if any(not fold.fitted for fold in folds):
         limitations.append(
-            "some folds were not fitted (insufficient training history) — their edges use the grid default"
+            "some folds were not fitted (insufficient training history) — their edges use "
+            "the grid default"
         )
-    run_id = hashlib.sha256(
-        (
-            f"{protocol.digest()}|{instrument_id}|{data_snapshot_id}|{series.dates()[0] if series.dates() else ''}"
-            f"|{series.dates()[-1] if series.dates() else ''}|{__version__}"
-        ).encode()
-    ).hexdigest()[:32]
+    basis = {
+        "protocol": protocol.digest(),
+        "instrument": instrument_id,
+        "snapshot": data_snapshot_id,
+        "source": data_source,
+        "prices": [(day.isoformat(), str(price)) for day, price in series.up_to(series.dates()[-1])]
+        if series.dates()
+        else [],
+        "sessions": [day.isoformat() for day in sessions],
+        "capital": str(book.initial_cash),
+        "quantity_step": str(book.quantity_step),
+        "target": str(book.target_weight),
+        "cash_yield": str(book.cash_yield_annual),
+        "costs": book.cost.model_dump(mode="json"),
+        "execution": EXECUTION_VERSION,
+        "version": __version__,
+    }
+    run_id = hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:32]
     return EdgeReport(
         protocol_digest=protocol.digest(),
         protocol_version=protocol.protocol_version,
@@ -487,7 +511,7 @@ def evaluate_protocol(
     )
 
 
-def _report_dict(report: EdgeReport) -> dict:
+def _report_dict(report: EdgeReport) -> dict[str, object]:
     return {
         "protocol": {
             "version": report.protocol_version,
@@ -548,22 +572,26 @@ def render_report_markdown(report: EdgeReport) -> str:
         f"# Economic-Edge Evaluation — {report.instrument_id}",
         "",
         f"- **Verdict: {report.verdict.value.upper()}**",
-            f"- protocol `{report.protocol_version}` digest `{report.protocol_digest}` — run "
-            f"`{report.run_id}` (code {report.code_version})",
-            f"- data: snapshot `{report.data_snapshot_id}` ({report.data_source}), "
-            f"sample {report.sample['sessions']} sessions {report.sample['start']}..{report.sample['end']} "
-            f"- data is explicitly **SIMULATION/RESEARCH** — no live actions",
-            "Rationale:",
+        f"- protocol `{report.protocol_version}` digest `{report.protocol_digest}` — run "
+        f"`{report.run_id}` (code {report.code_version})",
+        f"- data: snapshot `{report.data_snapshot_id}` ({report.data_source}), "
+        f"sample {report.sample['sessions']} sessions "
+        f"{report.sample['start']}..{report.sample['end']} "
+        f"- data is explicitly **SIMULATION/RESEARCH** — no live actions",
+        "Rationale:",
         *[f"- {item}" for item in report.rationale],
         "",
         "Walk-forward folds (fit on strictly earlier sessions):",
-        "| fold | test window | sessions | rule | strat ret | passive ret | cash ret | edge | max dd | cost |",
+        "| fold | test window | sessions | rule | strat ret | passive ret | cash ret | "
+        "edge | max dd | cost |",
         "|---|---|---|---|---|---|---|---|---|---|",
     ]
     for fold in report.folds:
         lines.append(
-                f"| {fold.fold_index} | {fold.test_start}..{fold.test_end} | {fold.test_sessions} | `{fold.rule_digest}`"
-                f"({'fitted' if fold.fitted else 'default'}) | {fold.strategy_total_return} | {fold.passive_total_return}"
+            f"| {fold.fold_index} | {fold.test_start}..{fold.test_end} | "
+            f"{fold.test_sessions} | `{fold.rule_digest}`"
+            f"({'fitted' if fold.fitted else 'default'}) | {fold.strategy_total_return} | "
+            f"{fold.passive_total_return}"
             f"| {fold.cash_total_return} | {fold.edge if fold.edge is not None else 'n/a'} "
             f"| {fold.strategy_max_drawdown} | {fold.cost_paid} |"
         )
@@ -574,7 +602,8 @@ def render_report_markdown(report: EdgeReport) -> str:
     ]
     lines += ["", "Robustness (verdict stability under registered perturbations):"]
     lines += [
-            f"- {item.perturbation} — {item.detail} → {item.verdict} ({'stable' if item.stable else 'UNSTABLE'})"
+        f"- {item.perturbation} — {item.detail} → {item.verdict} "
+        f"({'stable' if item.stable else 'UNSTABLE'})"
         for item in report.robustness
     ]
     lines += ["", "Limitations:"]

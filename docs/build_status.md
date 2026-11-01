@@ -1,9 +1,51 @@
 # Trading agent build status
 
-**Last updated:** 2026-11-01 (Prompt 12 disabled bounded-autonomy controls; historical evidence retained)
+**Last updated:** 2026-11-01 (owner-selected offline stabilization and isolated auth preparation)
 **Current financial authority:** LIVE_NOT_AUTHORIZED
-**Approved live capital:** 0 USD (requested USD 1,000 pilot: recorded, activation pending — plan section 24)
-**Next dependency:** Owner review and upstream repairs; the numbered pack ends at Prompt 12. Actual live readiness remains blocked.
+**Approved live capital:** 0 USD. Owner now reports USD 500 available in an Agentic account; unverified, unsigned and inactive. Earlier USD 1,000 worksheets remain historical.
+**Next dependency:** Owner-operated isolated OAuth/schema observation and external validation; no next numbered prompt or live activation path.
+
+## Post-prompt offline repairs and USD 500 request
+
+On branch `codex/offline-stabilization`, repaired schema compatibility, durable
+ledger ordering, cross-run identities/baseline fills, worker fencing/restart,
+order transitions, causal/cost/whole-unit evaluation, advisory persistence and
+read-model/bootstrap/cursor/export paths. Normal migration/demo/website now work
+against disposable persisted synthetic data. Full checks: **325 tests passed**
+with all four dedicated PostgreSQL opt-ins (one deprecation warning), **Ruff PASS**,
+**mypy PASS across 124 source files**, compile and JavaScript syntax PASS.
+
+The original three economic failures are preserved with original test source,
+input hashes and expected/observed outcomes. Assertions were reviewed against
+fixed inputs; the original periodic fixture remains tested. The algorithm grid,
+objectives, holdouts and thresholds were unchanged. This is software evidence,
+not evidence of a profitable algorithm. Historical failed checks below remain
+facts about their snapshots; use the [current repair matrix and exact commands](stabilization_and_auth_readiness.md)
+for their present disposition.
+
+The owner-reported USD 500 and balance-only preference are recorded in a new
+[unsigned inactive draft](pilot500_owner_request.unsigned.json). Existing risk
+limits are retained. The $500 persisted fixture completed 128 sessions with zero
+strategy orders/fills; no trade was forced. A separate larger fixture exercises
+fills. No exact assets, frozen live strategy, actual capital authority, expiry,
+monitoring or recovery decisions were invented.
+
+A separate-OS-user `owner-auth` command prepares official PKCE OAuth/schema-only
+discovery with protected local storage; injected fake-transport security tests
+pass. Public metadata only was fetched. No real registration, consent, token,
+MCP account query or broker mutation occurred. Two harmless loopback LM Studio
+HOLD probes passed; protected inference and complete capability attestation remain
+pending. [Owner-runtime instructions](owner_runtime_setup.md) separate private
+owner browser interaction from coding/research.
+
+Overall live readiness remains BLOCKED: no real transport, owner signer or
+activation loader, deployed executor/monitor isolation, validated broker behavior
+or prospective investment record. Large-history website performance and full M5
+acceptance are not certified. Existing owner databases/global model settings and
+unrelated services were untouched. Local owned review services are stopped after
+review. The existing publication authorization covers this source branch push;
+no deployment or protected-branch merge is performed. The numbered pack ends at
+Prompt 12; remaining work depends on observed integration facts and owner review.
 
 ## Prompt 12 — Bounded-autonomy readiness, without activation (M7/M8 controls)
 

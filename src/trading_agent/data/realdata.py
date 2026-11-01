@@ -33,7 +33,9 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from decimal import Decimal
+from email.message import Message
 from pathlib import Path
+from typing import IO
 from zoneinfo import ZoneInfo
 
 from ..config.models import SourceSpec, TradingConfig
@@ -57,7 +59,7 @@ FRED_DEFAULT_API_BASE = "https://api.stlouisfed.org"
 #: ``data_cache`` layout root relative to the project (overridable in tests).
 HTTPGet = Callable[[str, float], tuple[int, bytes]]
 
-OBSERVATION = dict[str, Decimal]  # ISO date -> close (canonical)
+OBSERVATION = dict[date, Decimal]  # normalized session date -> close
 
 
 def _sha256_hex(payload: bytes | str) -> str:
@@ -92,7 +94,8 @@ class SymbolFetch:
 
     source_id: str
     symbol: str
-    status: str  # ok | cached | no_adapter | disabled | unreachable | auth_failed | parse_failed | invalid
+    # ok | cached | no_adapter | disabled | unreachable | auth_failed | parse_failed | invalid
+    status: str
     bars: int = 0
     first_date: date | None = None
     last_date: date | None = None
@@ -128,7 +131,15 @@ class RealSymbolData:
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
+    def redirect_request(
+        self,
+        req: urllib.request.Request,
+        fp: IO[bytes],
+        code: int,
+        msg: str,
+        headers: Message,
+        newurl: str,
+    ) -> None:
         raise urllib.error.HTTPError(req.full_url, code, "redirect denied", headers, fp)
 
 
@@ -156,6 +167,10 @@ class RealDataCache:
 
     def __init__(self, root: str | Path) -> None:
         self._root = Path(root)
+
+    @property
+    def root(self) -> Path:
+        return self._root
 
     def _path(self, source_id: str, symbol: str) -> Path:
         if (
@@ -302,7 +317,7 @@ def fetch_symbol(
         and (max_age is None or now - cached.fetched_at <= max_age)
         and _tail_is_current(cached, now, spec.refresh.backfill_sessions)
     )
-    if fresh and rows:
+    if fresh and rows and cached is not None:
         return SymbolFetch(
             spec.id,
             symbol,
@@ -316,7 +331,7 @@ def fetch_symbol(
 
     url = _fred_url(api_base, symbol, start, end, api_key)
     try:
-        status_code, body = http_get(url, timeout=30.0)
+        status_code, body = http_get(url, 30.0)
     except (urllib.error.URLError, TimeoutError, OSError, ValueError) as error:
         return SymbolFetch(
             spec.id,
@@ -451,12 +466,8 @@ class RealMarketProvider(MarketDataProvider):
         )
 
     @property
-    def source_id(self) -> str:
-        return self._source_id
-
-    @property
     def symbols(self) -> tuple[str, ...]:
-        return self._symbols
+        return tuple(self._symbols)
 
     @property
     def stale_after_sessions(self) -> int:

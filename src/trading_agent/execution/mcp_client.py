@@ -29,9 +29,11 @@ from __future__ import annotations
 
 import json
 import re
+from contextlib import suppress
+from typing import Any
 
 from httpx import Client as HttpxClient
-from httpx import HTTPError, ReadTimeout
+from httpx import HTTPError, ReadTimeout, Response
 
 from ..contracts.broker import (
     BrokerExecutionDenied,
@@ -60,7 +62,11 @@ class McpClient:
         self._base_url = base_url
         self._token = token
         self._timeout = timeout_seconds
-        self._http = http if http is not None else HttpxClient(timeout=timeout_seconds)
+        self._http = (
+            http
+            if http is not None
+            else HttpxClient(timeout=timeout_seconds, follow_redirects=False, trust_env=False)
+        )
         self._owns_http = http is None
         self._session_id: str | None = None
         self._rpc_id = 0
@@ -80,15 +86,13 @@ class McpClient:
 
     def close(self) -> None:
         if self._owns_http:
-            try:
+            with suppress(Exception):
                 self._http.close()
-            except Exception:  # noqa: BLE001 - teardown must not raise
-                pass
         self._connected = False
 
     # ------------------------------------------------------------------- rpc
 
-    def initialize(self) -> dict:
+    def initialize(self) -> dict[str, Any]:
         """Perform the protocol handshake; raises a classified BrokerError."""
         result = self._rpc(
             "initialize",
@@ -102,7 +106,7 @@ class McpClient:
         self._notify("notifications/initialized", {})
         return result or {}
 
-    def list_tools(self) -> list[dict]:
+    def list_tools(self) -> list[dict[str, Any]]:
         """Return the raw tool definitions (name/description/inputSchema)."""
         if not self._connected:
             raise BrokerUnavailable("session not initialized")
@@ -112,7 +116,9 @@ class McpClient:
             raise BrokerStateNotAvailable("tools/list returned no tool list")
         return [tool for tool in tools if isinstance(tool, dict)]
 
-    def call_tool(self, name: str, arguments: dict, *, permitted: set[str] | None = None) -> dict:
+    def call_tool(
+        self, name: str, arguments: dict[str, Any], *, permitted: set[str] | None = None
+    ) -> dict[str, Any]:
         """Call one tool. ``permitted`` (when given) hard-blocks other names.
 
         Passing ``permitted`` without the requested name raises
@@ -135,16 +141,16 @@ class McpClient:
             raise BrokerStateNotAvailable(f"tool '{name}' returned no result")
         return result
 
-    def _notify(self, method: str, params: dict) -> None:
+    def _notify(self, method: str, params: dict[str, Any]) -> None:
         body = {"jsonrpc": "2.0", "method": method, "params": params}
         self._post(body, expect_result=False)
 
-    def _rpc(self, method: str, params: dict) -> dict | None:
+    def _rpc(self, method: str, params: dict[str, Any]) -> dict[str, Any] | None:
         self._rpc_id += 1
         body = {"jsonrpc": "2.0", "id": self._rpc_id, "method": method, "params": params}
         return self._post(body, expect_result=True)
 
-    def _post(self, body: dict, *, expect_result: bool) -> dict | None:
+    def _post(self, body: dict[str, Any], *, expect_result: bool) -> dict[str, Any] | None:
         require_official_broker_url(self._base_url)
         headers = {
             "Content-Type": "application/json",
@@ -197,10 +203,13 @@ class McpClient:
             raise BrokerStateNotAvailable("broker MCP response identity mismatch")
         if "error" in payload:
             raise BrokerStateNotAvailable("broker MCP returned a classified RPC error")
-        return payload.get("result")
+        result = payload.get("result")
+        if result is not None and not isinstance(result, dict):
+            raise BrokerStateNotAvailable("broker MCP result must be an object")
+        return result
 
     @staticmethod
-    def _parse_body(response, expected_id=None) -> dict | None:
+    def _parse_body(response: Response, expected_id: int | None = None) -> dict[str, Any] | None:
         """Parse an application/json or text/event-stream response body."""
         content_type = response.headers.get("content-type", "")
         text = response.text
@@ -209,18 +218,15 @@ class McpClient:
         if "text/event-stream" in content_type:
             return _parse_sse(text, expected_id)
         try:
-            return json.loads(text)
+            value = json.loads(text)
         except ValueError:
-            # Some servers answer JSON without the exact content type.
-            try:
-                return json.loads(text)
-            except ValueError as error:
-                raise BrokerStateNotAvailable(
-                    "broker MCP returned a body that is neither JSON nor SSE"
-                ) from error
+            raise BrokerStateNotAvailable("broker MCP returned invalid JSON") from None
+        if not isinstance(value, dict):
+            raise BrokerStateNotAvailable("broker MCP response must be an object")
+        return value
 
 
-def _parse_sse(text: str, expected_id=None) -> dict | None:
+def _parse_sse(text: str, expected_id: int | None = None) -> dict[str, Any] | None:
     for event in text.replace("\r\n", "\n").split("\n\n"):
         data = "\n".join(
             line[5:].lstrip() for line in event.splitlines() if line.startswith("data:")
@@ -238,7 +244,7 @@ def _parse_sse(text: str, expected_id=None) -> dict | None:
     return None
 
 
-def _extract_tool_text(result: dict) -> str:
+def _extract_tool_text(result: dict[str, Any]) -> str:
     """Concatenate the text parts of a tools/call result."""
     parts = result.get("content")
     if not isinstance(parts, list):
@@ -251,7 +257,7 @@ def _extract_tool_text(result: dict) -> str:
     return "\n".join(chunk for chunk in chunks if chunk)
 
 
-def parse_tool_payload(result: dict):
+def parse_tool_payload(result: dict[str, Any]) -> object:
     """Parse the text content of a tools/call result as JSON, if possible.
 
     Broker tool results are conventionally JSON documents inside the text

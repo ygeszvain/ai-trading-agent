@@ -8,9 +8,9 @@ and reconciliation services govern financial behavior.
 **Experimental development snapshot — November 1, 2026.** The repository includes
 simulation, backtesting, economic evaluation, research, gateway scaffolding,
 learning experiments, and an authenticated local website. These components are
-at different stages of verification. The full test suite currently has failures;
-see [current security review](docs/security_readiness_review.md) and the
-historical [publication baseline](docs/publication_status.md).
+at different stages of verification. The offline stabilization check passes 325 tests, full Ruff, and mypy; see the
+[current repair report](docs/stabilization_and_auth_readiness.md) and historical
+[publication baseline](docs/publication_status.md). Actual live readiness remains blocked.
 
 Prompt 9's research-only learning workflow is now implemented in this source
 checkout. Run `uv run trading-agent learning demo` for matured and incomplete
@@ -46,7 +46,7 @@ provision it if necessary. Installing dependencies needs network access; the
 synthetic commands below require no broker, model server, data key, or database.
 
 ```bash
-git clone https://github.com/ygeszvain/ai-trading-agent.git
+git clone --branch codex/offline-stabilization https://github.com/ygeszvain/ai-trading-agent.git
 cd ai-trading-agent
 uv sync --locked
 uv run trading-agent --help
@@ -62,9 +62,8 @@ disabled. Monetary values use Decimal or integer units in backend services.
 
 The backtest writes `report.md`, `results.json`, `equity.csv`, `fills.csv`, and
 `equity_curve.svg` under `reports/<backtest-id>/`. Reports and local state are
-ignored by Git. Report generation currently succeeds, but accounting/benchmark
-and evaluation limitations remain open; do not rely on its metrics for capital
-allocation. Backtest capital and the persisted simulator's paper capital are
+ignored by Git. Causal execution, cost and benchmark fixes pass their offline checks. Synthetic
+metrics are not investment evidence; do not use them as a capital-allocation endorsement. Backtest capital and the persisted simulator's paper capital are
 separate settings; inspect `backtest` and `paper` in the configuration.
 
 For a versioned synthetic economic-evaluation report:
@@ -78,11 +77,11 @@ uv run trading-agent eval TEST_A --out-dir reports/evaluation
 Follow [SETUP.md](SETUP.md) for configuration, optional PostgreSQL, migrations,
 owner-token login, website startup, tests, troubleshooting, and shutdown.
 The website binds to `http://127.0.0.1:8000` and reads persisted database state;
-running a file-based backtest does not populate its portfolio. The delivered
-pages cover Overview, Activity, Orders/fills, Portfolio, and instrument details.
-Core persisted browser failure checks now pass in the isolated review fixture.
-Normal startup is blocked by a detected migration/schema mismatch; full M5
-website acceptance remains pending. See the [security evidence matrix](docs/security_readiness_review.md).
+running a file-based backtest does not populate its portfolio. The delivered pages include Overview, Activity, Orders/fills, Portfolio, instrument
+details, read-only learning/readiness/autonomy, and bounded Data/Research/Risk/
+Performance/Health/Alerts/Audit reviews. Normal migrations, persisted simulation
+and website startup now work. Full M5 acceptance remains pending; see the
+[repair evidence matrix](docs/stabilization_and_auth_readiness.md).
 
 Do not publish the application server, expose a tunnel, or connect a financial
 account as part of this quick start. Publishing this source repository does not
@@ -97,9 +96,10 @@ uv run ruff check src tests
 uv run mypy
 ```
 
-These are real checks, not an all-green claim. Known failures are recorded in
-[security review](docs/security_readiness_review.md) and the historical
-[publication_status.md](docs/publication_status.md). Please retain failed results
+The full review with four explicitly bound disposable PostgreSQL databases
+passed 325 tests; without those opt-ins some DB checks skip. Full Ruff and mypy
+also pass. Exact commands and retained historical failures are in the
+[repair report](docs/stabilization_and_auth_readiness.md). Retain failed results
 and evaluation objectives when contributing. Read [CONTRIBUTING.md](CONTRIBUTING.md)
 and [AGENTS.md](AGENTS.md) before changing code. Use synthetic data and keep
 credentials, account data, and private logs out of issues and pull requests.
@@ -124,10 +124,17 @@ The [build plan](docs/Robinhood_Local_AI_Trading_Build_Plan.md),
 product and boundaries. [Build status](docs/build_status.md) retains the original
 M0 acceptance evidence; the publication addendum distinguishes the current
 snapshot from completed milestones. No later milestone is certified by this
-publication. Prompts 9–11 were explicitly selected separately. M6 mock controls pass their
-focused checks; actual readiness remains **BLOCKED** (full suite: 222 passed /
-3 existing failures). The next numbered task is **Prompt 12**, only when
-selected; earlier acceptance and operational dependencies remain unresolved.
+publication. Prompts 9–12 were explicitly selected separately; the numbered pack
+ends at 12. Later offline repairs do not certify broker integration, operational
+readiness or an investable edge.
+
+The owner-reported USD 500 and balance-only preference are recorded in an
+[inactive pilot draft](docs/pilot500_owner_request.unsigned.json). Try
+`uv run trading-agent backtest run --config config/pilot500.simulation.yaml` for
+an offline feasibility fixture. It does not relax existing limits or trade real
+money. [Owner-runtime setup](docs/owner_runtime_setup.md) describes private,
+separately operated official OAuth/schema discovery; there is no live executor
+or activation path in this release.
 
 ## License
 

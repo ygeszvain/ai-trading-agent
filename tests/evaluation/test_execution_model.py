@@ -26,7 +26,8 @@ def _bar(day: date, close, open_=None, high=None, low=None, volume=Decimal("1_00
     return SessionObservation(day, close, open_, high, low, volume)
 
 
-def _model(costs=ExecutionCosts(), obs=None):
+def _model(costs=None, obs=None):
+    costs = costs if costs is not None else ExecutionCosts()
     if obs is None:
         obs = {
             "T": {
@@ -39,7 +40,8 @@ def _model(costs=ExecutionCosts(), obs=None):
     return ConservativeExecutionModel(obs, costs)
 
 
-def _limit_order(model=_model(), qty=Decimal("1000")):
+def _limit_order(model=None, qty=Decimal("1000")):
+    model = model if model is not None else _model()
     return Order.from_signal(
         instrument="T",
         side=OrderSide.BUY,

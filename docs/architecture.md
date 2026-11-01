@@ -11,6 +11,23 @@ and the persistence strategy. The website contract is specified in
 kept separate in [capability_matrix.md](capability_matrix.md); rationale for
 each choice is in [decision_log.md](decision_log.md).
 
+## November 1 offline repair addendum
+
+The [current repair report](stabilization_and_auth_readiness.md) supersedes earlier
+schema/startup defects: durable sequenced ledger, preserved legacy evidence,
+account-scoped executor lease/fence, baseline fill books and repeatable-read web
+bootstrap now pass disposable integration tests. Browser cursors bind scope and
+expiry; reconnect gaps require resnapshot. Exports are synthetic-only and bounded.
+
+`owner_runtime/auth.py` is an owner-run entry point under the exact separate OS
+identity `ai-trading-executor`, outside the coding/research credential boundary.
+It provides pinned official public-client PKCE, protected storage and schema-only
+discovery, not a broker execution adapter. No actual OS isolation deployment,
+authentication or account binding has been attested. The advertised `internal`
+scope is not assumed read-only. Research and web do not load these credentials.
+Actual dispatch remains denied and capital zero. Historical sections below retain
+their original evidence; same-user module boundaries still are not a sandbox.
+
 ## November 1 security review boundary
 
 Read [the Prompt 10 matrix](security_readiness_review.md) for current observed

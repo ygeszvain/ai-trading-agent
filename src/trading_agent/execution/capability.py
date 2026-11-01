@@ -25,6 +25,7 @@ import hashlib
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 import yaml
 
@@ -49,10 +50,10 @@ class ToolSchema:
 
     name: str
     description: str
-    input_schema: dict
+    input_schema: dict[str, Any]
 
     @classmethod
-    def from_api(cls, raw: dict) -> ToolSchema:
+    def from_api(cls, raw: dict[str, Any]) -> ToolSchema:
         return cls(
             name=str(raw.get("name", "")),
             description=str(raw.get("description", "")),
@@ -151,7 +152,7 @@ class ToolAllowlist:
         return cls.from_dict(raw, source=str(path))
 
     @classmethod
-    def from_dict(cls, raw: dict, *, source: str = "<dict>") -> ToolAllowlist:
+    def from_dict(cls, raw: dict[str, Any], *, source: str = "<dict>") -> ToolAllowlist:
         tools = raw.get("tools") or {}
         if not isinstance(tools, dict):
             raise CapabilityMismatch(f"allowlist 'tools' must be a mapping ({source})")
@@ -203,7 +204,7 @@ class ToolAllowlist:
         spec = self.role_for(tool_name)
         return spec is not None and spec.category == required_category and spec.name is not None
 
-    def to_dict(self) -> dict:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "version": self._version,
             "tools": {

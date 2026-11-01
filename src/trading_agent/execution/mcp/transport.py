@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+from contextlib import suppress
 from typing import Any
 
 import httpx
@@ -139,12 +140,10 @@ class JsonRpcTransport:
                 message = json.loads(payload)
             except json.JSONDecodeError:
                 continue
-            if "id" in message and message["id"] is not None:
+            if isinstance(message, dict) and "id" in message and message["id"] is not None:
                 return message
         raise RpcError(-32000, "no JSON-RPC message found in SSE stream")
 
     def close(self) -> None:
-        try:
+        with suppress(Exception):
             self._http.close()
-        except Exception:  # noqa: BLE001 - best-effort shutdown
-            pass

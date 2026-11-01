@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% set page = "review" %}
+{% block content %}
+<h1>{{ view.payload.section | title }} — {{ mode }}</h1>
+<p>LIVE_NOT_AUTHORIZED. Persisted account/mode/run scope only. No financial controls or inference.</p>
+<p>Scope: {{ view.scope | tojson }}. Read as of {{ view.as_of }}. Market watermark: {{ view.watermark }}.</p>
+<p>These are bounded review projections, ordered by primary key. Missing evidence remains unavailable. Integration and investment evidence are EXTERNAL_VALIDATION_PENDING.</p>
+<p><a href="/api/v1/exports/activity.csv?run_id={{ view.scope.run_id | urlencode }}">Export up to 100 synthetic activity events</a> (read X-Next-Cursor / X-Has-More headers for subsequent pages).</p>
+<pre>{{ view | tojson(indent=2) }}</pre>
+{% endblock %}

@@ -9,6 +9,7 @@ boundary, per the repo-wide Decimal-precision rule.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -48,7 +49,7 @@ def sortino(returns: list[Decimal], periods_per_year: int = 252) -> float:
     downside_var = sum((r**2 for r in downside), Decimal(0)) / Decimal(len(returns))
     if downside_var <= 0:
         return 0.0 if m <= 0 else math.inf
-    return _to_float(m) / math.sqrt(_to_float(downside_var)) * math.sqrt(periods_per_year)
+    return m / math.sqrt(_to_float(downside_var)) * math.sqrt(periods_per_year)
 
 
 def calmar(total_return: Decimal, max_drawdown: Decimal, years: Decimal) -> float:
@@ -72,7 +73,7 @@ def mean_t_statistic(returns: list[Decimal]) -> float:
 
 def bootstrap_interval(
     returns: list[Decimal],
-    statistic,
+    statistic: Callable[[list[Decimal]], float],
     samples: int = 500,
     confidence: float = 0.95,
     rng_seed: int = 13,

@@ -296,6 +296,9 @@ def _run_eval(args: argparse.Namespace) -> int:
         cash_yield_annual=backtest.cash_yield_annual,
         cost=backtest.cost,
         target_weight=Decimal(config.strategy.target_weight),
+        quantity_step=Decimal(".00000001")
+        if config.universe.allow_fractional_orders
+        else Decimal(1),
     )
     protocol = _load_eval_protocol(args.protocol)
     data_source = "synthetic" if isinstance(provider, SyntheticMarketProvider) else "real"
@@ -416,7 +419,9 @@ def _run_data_sync(args: argparse.Namespace) -> int:
             cache,
             start,
             end,
-            api_key=(os.environ.get(FRED_API_KEY_ENV) or os.environ.get(spec.api_key_env or "")),
+            api_key=(
+                os.environ.get(FRED_API_KEY_ENV) or os.environ.get(spec.api_key_env or "") or ""
+            ),
             now=now,
         )
         cached = sum(1 for item in result.results if item.status == "cached")
@@ -457,6 +462,20 @@ def build_parser() -> argparse.ArgumentParser:
     config_parent.add_argument("--config", default=argparse.SUPPRESS, help=argparse.SUPPRESS)
 
     subparsers = parser.add_subparsers(dest="command", required=True)
+
+    auth = subparsers.add_parser("owner-auth", help="Separate OS runtime only; no trading")
+    auth.add_argument("action", choices=("login", "status", "discover"))
+    auth.add_argument("--runtime-dir", type=Path, required=True)
+    auth.set_defaults(func=_run_owner_auth)
+
+    migrate = subparsers.add_parser(
+        "migrate", help="Apply reviewed local DB migrations", parents=[config_parent]
+    )
+    migrate.set_defaults(func=_run_migrate)
+    demo = subparsers.add_parser(
+        "demo", help="Persist the fictional simulation; no broker", parents=[config_parent]
+    )
+    demo.set_defaults(func=_run_persisted_demo)
 
     learning_parser = subparsers.add_parser(
         "learning", help="research-only learning artifacts (no activation)", parents=[config_parent]
@@ -586,6 +605,46 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def _run_owner_auth(args: argparse.Namespace) -> int:
+    from ..owner_runtime.auth import AuthError, discover, login, status
+
+    try:
+        result = {"login": login, "status": status, "discover": discover}[args.action](
+            args.runtime_dir
+        )
+    except (AuthError, OSError, ValueError):
+        print(
+            "Owner authentication unavailable: verify separate OS identity, private "
+            "runtime directory and official flow. No trading activated.",
+            file=sys.stderr,
+        )
+        return 2
+    print(json.dumps(result, indent=2))
+    return 0
+
+
+def _run_migrate(args: argparse.Namespace) -> int:
+    from ..db.migrate import run_migrations
+
+    config = load_config(_resolve_config_path(args.config), ConfigEnvironment())
+    if config.live.enabled:
+        raise ConfigError(["offline migration requires live dispatch disabled"])
+    print("migration: " + run_migrations(config))
+    print("authority: LIVE_NOT_AUTHORIZED")
+    return 0
+
+
+def _run_persisted_demo(args: argparse.Namespace) -> int:
+    from dataclasses import asdict
+
+    from ..engine.pipeline import TradingPipeline
+
+    config = load_config(_resolve_config_path(args.config), ConfigEnvironment())
+    result = TradingPipeline(config).run()
+    print(json.dumps(asdict(result), default=str, indent=2))
+    return 0
+
+
 def _run_autonomy_demo(args: argparse.Namespace) -> int:
     from ..autonomy.demo import run_demo
 
@@ -670,7 +729,8 @@ def _run_serve(args: argparse.Namespace) -> int:
         return 2
     from ..web.app import serve  # lazy: uvicorn is only required for ``serve``
 
-    return serve(config, host=args.host, port=args.port)
+    serve(config, host=args.host, port=args.port)
+    return 0
 
 
 def _run_version(args: argparse.Namespace) -> int:

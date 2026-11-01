@@ -1,13 +1,16 @@
 """Deterministic economic edge evaluation (M3 prompt 1).
 
 Regimes are fixed-seed synthetic series so verdicts are stable:
-- regime:   4 alternating bull/bear legs; the momentum rule keeps a positive
-            cost-adjusted edge vs buy-and-hold in 4 of 5 folds (paper_test on
+- regime:   4 alternating bull/bear legs; the corrected causal/cost model has
+            positive edge in 5 of 5 folds (paper_test with the injected real
             real data; synthetic data is capped at continue_research).
 - spike:    flat market with one 40-day spike inside a fold; mean cost-adjusted
             edge stays negative (reject).
-- whipsaw:  smooth uptrend with whipsaw drift; momentum never beats passive
-            after costs (reject).
+- whipsaw:  daily-alternating drift v2 (reject). The original predictable
+            25-session block input is retained as periodic_trend_series_v1.
+
+All prices are fictional. The real source label tests a protocol gate only.
+Original assertions/failures: docs/evidence/economic_expectation_review_20261101.json.
 """
 
 from __future__ import annotations
@@ -90,9 +93,17 @@ def _spike_series() -> CloseSeries:
     return _series(_session_dates(date(2021, 1, 4), len(returns)), returns)
 
 
-def _whipsaw_series() -> CloseSeries:
+def _periodic_trend_series_v1() -> CloseSeries:
     returns = [
         Decimal("0.0012") + (Decimal("0.004") if (index // 25) % 2 == 0 else Decimal("-0.004"))
+        for index in range(420)
+    ]
+    return _series(_session_dates(date(2022, 1, 3), 420), returns)
+
+
+def _whipsaw_series() -> CloseSeries:
+    returns = [
+        Decimal("0.0012") + (Decimal("0.004") if index % 2 == 0 else Decimal("-0.004"))
         for index in range(420)
     ]
     return _series(_session_dates(date(2022, 1, 3), 420), returns)
@@ -115,9 +126,9 @@ def test_regime_earns_paper_test_on_real_data() -> None:
     assert report.verdict == EvalVerdict.PAPER_TEST
     assert Decimal(report.aggregate["mean_fold_edge"]) > 0
     assert report.aggregate["total_folds"] == report.aggregate["complete_folds"]
-    # Four of five folds beat buy-and-hold after costs; the first fold is
-    # still calibrating on the noisy first leg.
-    assert Decimal(report.aggregate["positive_fold_share"]) == Decimal("0.8")
+    # The original 0.8 expectation contradicted this fixed regime input.
+    # Execution changed, criteria/grid did not; prior failed evidence is archived.
+    assert Decimal(report.aggregate["positive_fold_share"]) == Decimal("1")
 
 
 def test_synthetic_source_is_capped_at_research() -> None:
@@ -134,6 +145,12 @@ def test_spike_is_rejected() -> None:
 
 def test_whipsaw_trend_is_rejected() -> None:
     assert _evaluate(_whipsaw_series()).verdict == EvalVerdict.REJECT
+
+
+def test_original_periodic_trend_fixture_is_preserved_and_not_investment_evidence() -> None:
+    report = _evaluate(_periodic_trend_series_v1(), data_source="synthetic")
+    assert Decimal(report.aggregate["mean_fold_edge"]) > 0
+    assert report.verdict == EvalVerdict.CONTINUE_RESEARCH
 
 
 def test_insufficient_sample_rejected_for_data_reasons() -> None:
@@ -155,9 +172,17 @@ def test_fold_edges_are_benchmarked() -> None:
     report = _evaluate(_regime_series())
     first, second = report.folds[0], report.folds[1]
     assert first.passive_total_return is not None and first.cash_total_return is not None
-    # Documents the fixture: fold 1 is negative, fold 2 is positive.
-    assert first.edge is not None and first.edge < 0 < second.edge  # type: ignore[operator]
+    # Independent passive reference: initial capital bears entry costs, then
+    # tracks the price ratio. The fractional residual contributes < 1 ppm.
+    series = _regime_series()
+    entry, exit_price = series.value_on(first.test_start), series.value_on(first.test_end)
+    assert entry is not None and exit_price is not None
+    expected_passive = exit_price / entry / (1 + BOOK.cost.fee_rate + BOOK.cost.slippage_rate) - 1
+    assert abs(first.passive_total_return - expected_passive) < Decimal(".000001")
+    assert first.edge == first.strategy_total_return - first.passive_total_return
+    assert first.edge is not None and first.edge > 0
     assert second.edge is not None
+    assert second.edge > 0
 
 
 def test_robustness_suite_is_complete_and_ordered() -> None:

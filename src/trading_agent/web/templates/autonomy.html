@@ -4,6 +4,7 @@
 <h1>Bounded autonomy — LIVE_NOT_AUTHORIZED</h1>
 <p>Read-only owner review. Actual approved capital: USD {{ view.runtime_approved_capital_usd }}. Automatic change class: {{ view.automatic_change_class }}.</p>
 <p>Integration: {{ view.integration_evidence }} · Investment: {{ view.investment_evidence }}. Software completion does not establish an investable edge.</p>
+<p>The worksheet below preserves the earlier USD 1,000 draft and its historical blockers. The owner later reported USD 500 in an existing Agentic account; that balance-only preference remains unverified and inactive in <code>docs/pilot500_owner_request.unsigned.json</code>. Approved live capital remains USD 0. Current repair evidence is in <code>docs/stabilization_and_auth_readiness.md</code>.</p>
 <fieldset disabled aria-label="Unavailable autonomy controls"><legend>Actual live controls unavailable</legend><button>Activate</button><button>Renew authority</button><button>Resume</button><button>Promote</button></fieldset>
 <details><summary>Unsigned owner review — {{ view.package.status }}</summary><pre>{{ view.package | tojson(indent=2) }}</pre></details>
 {% if view.mock %}

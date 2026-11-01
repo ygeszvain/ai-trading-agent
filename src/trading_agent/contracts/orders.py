@@ -111,6 +111,68 @@ class Order:
         return self.quantity - self.filled_quantity
 
     def transition(self, to: NormalizedOrderStatus, at: datetime, reason: str) -> None:
+        status = NormalizedOrderStatus
+        allowed = {
+            status.SUBMISSION_PENDING: {status.ACKNOWLEDGED, status.REJECTED, status.UNKNOWN},
+            status.ACKNOWLEDGED: {
+                status.PARTIALLY_FILLED,
+                status.FILLED,
+                status.CANCEL_PENDING,
+                status.CANCELLED,
+                status.EXPIRED,
+                status.UNKNOWN,
+            },
+            status.PARTIALLY_FILLED: {
+                status.PARTIALLY_FILLED,
+                status.FILLED,
+                status.CANCEL_PENDING,
+                status.CANCELLED,
+                status.EXPIRED,
+                status.UNKNOWN,
+            },
+            status.CANCEL_PENDING: {
+                status.PARTIALLY_FILLED,
+                status.FILLED,
+                status.CANCELLED,
+                status.EXPIRED,
+                status.UNKNOWN,
+            },
+            status.UNKNOWN: {
+                status.RECONCILING,
+                status.MANUAL_REVIEW,
+                status.ACKNOWLEDGED,
+                status.PARTIALLY_FILLED,
+                status.FILLED,
+                status.CANCELLED,
+                status.EXPIRED,
+                status.REJECTED,
+            },
+            status.RECONCILING: {
+                status.ACKNOWLEDGED,
+                status.PARTIALLY_FILLED,
+                status.FILLED,
+                status.CANCELLED,
+                status.EXPIRED,
+                status.REJECTED,
+                status.MANUAL_REVIEW,
+                status.UNKNOWN,
+            },
+            status.MANUAL_REVIEW: {status.RECONCILING},
+        }
+        initial = (
+            self.status is status.SUBMISSION_PENDING
+            and to is self.status
+            and not self.events
+            and self.updated_at is None
+        )
+        if not initial and to not in allowed.get(self.status, set()):
+            raise ValueError(f"illegal order transition {self.status.value} -> {to.value}")
+        if at.tzinfo is None or (self.updated_at is not None and at < self.updated_at):
+            raise ValueError("order event timestamp is naive or precedes prior event")
+        if self.filled_quantity < 0 or self.filled_quantity > self.quantity:
+            raise ValueError("filled quantity outside order bounds")
+        if to is status.FILLED and self.filled_quantity != self.quantity:
+            raise ValueError("FILLED requires exact complete quantity")
         self.events.append((at, to, reason))
         self.status = to
         self.updated_at = at

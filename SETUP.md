@@ -1,8 +1,9 @@
 # Setup and operation
 
 This guide describes the November 1, 2026 development snapshot. Start with the
-verified synthetic CLI workflow. Website, model, data-source, and gateway code
-have additional limitations in [publication status](docs/publication_status.md).
+verified synthetic CLI workflow. Current checks and remaining integration limits are in the
+[repair report](docs/stabilization_and_auth_readiness.md); the
+[publication status](docs/publication_status.md) is historical.
 
 ## 1. Install and validate
 
@@ -12,7 +13,7 @@ and needed only for the supplied PostgreSQL service. No Node.js toolchain is
 required; browser assets are bundled locally.
 
 ```bash
-git clone https://github.com/ygeszvain/ai-trading-agent.git
+git clone --branch codex/offline-stabilization https://github.com/ygeszvain/ai-trading-agent.git
 cd ai-trading-agent
 uv sync --locked
 uv run trading-agent check-config
@@ -85,8 +86,8 @@ It cannot activate a champion. The printed `/learning?experiment_id=<hash>` link
 opens the authenticated research page after website startup below. See
 [research_learning.md](docs/research_learning.md) for contracts, budgets,
 corrections, prospective-harness limits, and current checks. The initial
-publication's failing learning fixtures have been repaired; three separate M3
-economic-evaluation failures remain.
+publication's failed results remain archived; reviewed economic assertions and
+causal accounting fixes now pass without changing the evaluation protocol.
 
 ## 4. Optional local PostgreSQL and website
 
@@ -111,17 +112,21 @@ Optional connectivity check if `psql` is installed:
 psql -h 127.0.0.1 -p 5433 -U trading_agent -d trading_agent -c 'SELECT 1;'
 ```
 
-**Current startup blocker:** Prompt 10 found that Alembic head lacks required
-columns/tables. `serve` now stops with a schema compatibility error. A reviewed
-migration is required; do not bypass the guard or point at another project
-database. Core browser acceptance used the isolated synthetic harness documented
-in [the security review](docs/security_readiness_review.md).
-
-After resolving that blocker, start the website:
+Normal startup now passes on the repaired schema. For a **new disposable
+synthetic database**, migrate, populate a persisted $500 fixture, then serve:
 
 ```bash
-uv run trading-agent serve
+uv run trading-agent migrate --config config/pilot500.simulation.yaml
+uv run trading-agent demo --config config/pilot500.simulation.yaml
+uv run trading-agent serve --config config/pilot500.simulation.yaml
 ```
+
+For an existing database, first make an owner-reviewed backup and inspect the
+migration. Legacy M3 tables are retained under `legacy_m3_*`; ambiguous ledger
+ordering is blocked for manual review, not guessed. Populated downgrade refuses
+to discard evidence. Never bypass schema validation or use another project's DB.
+The repair review used its own disposable PostgreSQL on 55433 and did not touch
+the owner's existing 5433 database.
 
 Startup applies migrations, bootstraps a per-installation owner token, and serves
 `http://127.0.0.1:8000/auth/login`. Use that exact hostname so Host/Origin and
@@ -142,12 +147,14 @@ state; file-based backtests do not seed the website database. An incompatible
 database stops before serving; a compatible empty database returns unavailable
 data rather than invented amounts.
 
-The persisted simulation API is `TradingPipeline(config).run()` in
-`src/trading_agent/engine/pipeline.py`. It is not exposed as a current CLI `demo`
-command, and end-to-end seed/restart/browser acceptance has not been revalidated.
-Do not assume the historical docs' `demo`, `migrate`, `capabilities`,
-`broker setup`, or `--probe-llm` commands exist; inspect `--help`. This guide does
-not present an unverified seed procedure as working.
+`demo` now uses `TradingPipeline(config).run()` and persists the fictional run.
+A repeated completed run returns `already-complete`; crash/restart and competing
+worker paths are tested. At $500 the whole-share fixture produces zero strategy
+orders under existing limits; this is an honest feasibility result. Backtests
+still write files separately. `migrate` and `demo` require simulation/simulator
+settings. `capabilities`, `broker setup` and `--probe-llm` are not current commands.
+Inspect `--help` for actual commands; use the separate owner-runtime guide for
+authentication instead of legacy token-paste examples.
 
 Stop the disposable database, preserving its volume:
 
@@ -168,11 +175,12 @@ uv run mypy
 uv build
 ```
 
-The current suite and static checks fail for documented pre-existing reasons.
-Do not suppress failures, loosen risk limits, or change economic objectives to
-produce a passing badge. The publication report records actual results. Tests
-use fixtures; a subset exercises a local database, so full-suite results can
-also depend on database availability. No test is permission to submit a real order.
+The latest full review passed 325 tests, Ruff and mypy. Use the four explicit
+disposable PostgreSQL opt-ins in the [repair report](docs/stabilization_and_auth_readiness.md)
+to exercise all database cases; otherwise some skip. Original failed evidence
+and fixture-expectation review remain available. Never point test URLs at an owner
+database. No test is permission to submit a real order. A wheel-only deployment
+is not certified by these checks.
 
 ### Supervised readiness is an offline mock task
 
@@ -187,29 +195,32 @@ The demo writes a new fictional journal/report/unsigned package each time. Read
 QA, exact checks, unresolved fields and future owner-operated procedures.
 `config/pilot.simulation.yaml` is a separate USD 1,000 synthetic feasibility
 profile; live capital remains zero and the original limits remain unchanged.
-Actual readiness controls and real gateway/OAuth remain unavailable. Do not
-remove the startup/schema or live-dispatch guard to run an integration check.
+Actual live dispatch remains unavailable. A new USD 500 simulation profile and
+[unsigned owner draft](docs/pilot500_owner_request.unsigned.json) record the later
+request; the historical USD 1,000 worksheet remains unchanged. Do not remove
+schema or live-dispatch guards to run integration checks.
 
 ## 6. LM Studio, data, and broker dependencies
 
 No model server is required for the quick start. Local inference modules exist,
-but full endpoint/model/authentication acceptance remains unverified in this
-publication. Do not download weights or enable cloud fallback automatically.
+and two harmless local HOLD smoke probes passed; full model/authentication and
+artifact acceptance remain pending. Do not download weights or enable cloud fallback automatically.
 Keep model requests on the configured loopback endpoint and credentials outside
 source control. The [capability matrix](docs/capability_matrix.md) records older
 observations, not proof of your current installation's capabilities.
 
-Real-data fetching is disabled by default. `data status` currently raises an
-AttributeError, and provider protocols, series identities, point-in-time rights,
-and cache behavior need review before use. Do not enable a provider, purchase a
+Real-data fetching is disabled by default. `data status` now succeeds without fetching.
+Real provider protocols, series identities and point-in-time rights still require
+review before financial use. Do not enable a provider, purchase a
 feed, or redistribute data based on this snapshot.
 
-Gateway scaffolding is not an authenticated broker integration. The unvalidated
-real gateway and legacy OAuth paths are quarantined; setting shadow/live flags
-cannot activate them. Live dispatch remains unconditionally denied. This publication
-performs no financial-account authentication, account setup, orders, cancellations,
-transfers, or activation. Credentials belong in a separately controlled runtime
-only after the corresponding integration/security milestones and owner decisions.
+The real trading gateway and legacy OAuth paths stay quarantined. The new
+[owner-runtime guide](docs/owner_runtime_setup.md) provides PKCE browser OAuth
+and schema-only discovery under a separate required OS identity. It has been
+tested with fake transport; actual broker behavior remains pending. No broker
+authentication or protected MCP request was performed in this review. Setting
+shadow/live flags cannot activate dispatch. Keep real credentials outside the
+coding environment; setup/demo never funds, trades or activates.
 
 ## 6a. Disabled bounded-autonomy review (Prompt 12)
 
@@ -227,8 +238,8 @@ automatic change class stays NONE and no promotion/renewal/activation exists.
 
 Read [the M7 report and owner review](docs/bounded_autonomy_readiness.md) for
 commands, limits, persisted-data browser inspection and the unsigned worksheet.
-The `/autonomy` page is read-only. Normal website startup remains blocked by the
-known schema guard; the explicitly named fixture harness cannot trade. Owner-
+The `/autonomy` page is read-only. Normal website startup now works after the reviewed migration;
+the explicitly named fixture harness cannot trade. Owner-
 operated real integration checks, account/capital/limits/monitoring/recovery
 decisions and investment evidence remain pending. Setup never activates live mode.
 
@@ -243,7 +254,7 @@ decisions and investment evidence remain pending. Setup never activates live mod
 | Database unreachable | Check `docker compose ps`, port 5433, and `app.db_url`; do not use another project's database. |
 | Website refuses Host or Origin | Open the configured loopback URL with the correct port, not a LAN address or proxy. |
 | Schema compatibility failure | Stop; use the missing-table/column list for a reviewed migration. Do not bypass validation. |
-| Empty website | File reports do not populate database runs; use only the dedicated synthetic fixture for review. |
+| Empty website | File reports do not populate database runs; run the persisted simulation `demo` against your disposable synthetic DB. |
 | Test, lint, or type failures | Compare with the publication baseline and report a sanitized reproducer. |
 
 For a bug report, include the commit, Python/uv versions, exact command, synthetic

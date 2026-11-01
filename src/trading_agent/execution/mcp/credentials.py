@@ -23,15 +23,14 @@ import base64
 import hashlib
 import json
 import logging
-import os
 import secrets
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.asymmetric import x25519
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 log = logging.getLogger(__name__)
@@ -91,7 +90,6 @@ class CredentialStore:
 
     def _derive_fernet(self, path: Path, phrase: str) -> Fernet:
         key_path = path.with_suffix(path.suffix + ".key")
-        salt = phrase.encode()  # phrase is the KDF password; file salt below
         file_salt = self._read_file_salt(key_path)
         master = self._kdf(phrase.encode(), file_salt)
         key_path.parent.mkdir(parents=True, exist_ok=True)
@@ -150,7 +148,6 @@ class CredentialStore:
             }
         ).encode()
         # TokenRecord has no saved_at; rebuild via dict
-        payload = json.loads(plaintext)
         plaintext = json.dumps(
             {
                 "client_id": record.client_id,
@@ -173,14 +170,14 @@ class CredentialStore:
         )
 
     @classmethod
-    def from_metadata(cls, path: Path, *, phrase: str) -> "CredentialStore":
+    def from_metadata(cls, path: Path, *, phrase: str) -> CredentialStore:
         return cls(path, phrase)
 
     # ---------------------------------------------------------- token flows
 
     @classmethod
     def exchange(
-        cls, raw: dict, *, client_id: str, issuer: str, path: Path, phrase: str
+        cls, raw: dict[str, Any], *, client_id: str, issuer: str, path: Path, phrase: str
     ) -> TokenRecord:
         """Build a TokenRecord from an OAuth token response and persist it."""
         expires_in = float(raw.get("expires_in", 0) or 0)

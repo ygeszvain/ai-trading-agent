@@ -21,7 +21,9 @@ from __future__ import annotations
 
 import logging
 import threading
-from typing import Callable, Literal
+from collections.abc import Callable
+from contextlib import suppress
+from typing import Literal
 
 from sqlalchemy.orm import Session
 
@@ -119,30 +121,24 @@ class ShadowMonitor:
                 error = None
                 self._cycles += 1
             except Exception as exc:  # noqa: BLE001 - the loop must survive
-                error = f"{type(exc).__name__}: {exc}"
+                error = f"cycle_failure:{type(exc).__name__}"
                 if session is not None:
-                    try:
+                    with suppress(Exception):
                         session.rollback()
-                    except Exception:  # noqa: BLE001
-                        pass
-                if adapter is not None:
+                if adapter is not None and session is not None:
                     try:
-                        adapter.log_cycle_error(error)  # type: ignore[attr-defined]
+                        adapter.log_cycle_error(error)
                         session.commit()
                     except Exception:  # noqa: BLE001 - audit is best-effort
                         pass
                 log.warning("shadow cycle failed: %s", error)
             finally:
                 if adapter is not None:
-                    try:
+                    with suppress(Exception):
                         adapter.close()
-                    except Exception:  # noqa: BLE001
-                        pass
                 if session is not None:
-                    try:
+                    with suppress(Exception):
                         session.close()
-                    except Exception:  # noqa: BLE001
-                        pass
             self._last_error = error
             if self._on_cycle is not None:
                 try:

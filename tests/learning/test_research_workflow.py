@@ -366,7 +366,8 @@ def test_dashboard_auth_scope_and_reads_do_not_write_or_call_models(
     assert client.get("/learning?experiment_id=../../private").status_code == 404
     assert {p: p.read_bytes() for p in tmp_path.rglob("*.json")} == before
     assert calls == []
-    # Only the authentication database is used; research artifact reads never query financial tables.
+    # Only the authentication database is used.
+    # Research artifact reads never query financial tables.
     config.app.mode = TradingMode.PAPER
     assert client.get(url).status_code == 404
 

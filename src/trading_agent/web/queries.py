@@ -14,12 +14,14 @@ Every function:
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
+from sqlalchemy.sql.elements import ColumnElement
 
 from ..config.models import TradingConfig
 from ..db.schema import (
@@ -50,6 +52,15 @@ BOOK_LABELS = {
 }
 
 
+def _position_rows(value: Any) -> list[dict[str, Any]]:
+    """Read legacy JSON strings without rewriting the persisted evidence."""
+    if isinstance(value, str):
+        value = json.loads(value)
+    if not isinstance(value, list) or any(not isinstance(item, dict) for item in value):
+        raise ValueError("persisted position encoding unavailable")
+    return value
+
+
 def _money(value: Any) -> str | None:
     if value is None:
         return None
@@ -64,7 +75,7 @@ def _iso(value: Any) -> str | None:
             return None
     if value is None or not hasattr(value, "isoformat"):
         return None
-    return value.isoformat()
+    return str(value.isoformat())
 
 
 def _scope(config: TradingConfig, run: Any | None) -> dict[str, str | None]:
@@ -117,7 +128,7 @@ def _envelope(
     }
 
 
-def _run_scope(config: TradingConfig):
+def _run_scope(config: TradingConfig) -> tuple[ColumnElement[bool], ColumnElement[bool]]:
     alias = (
         ACCOUNT_ALIAS
         if config.app.mode.value == "simulation"
@@ -188,11 +199,11 @@ def get_overview(session: Session, config: TradingConfig, run_id: str | None) ->
                 "key": key,
                 "label": BOOK_LABELS.get(key, key),
                 "equity": _money(row.equity)
-                if all(p.get("mark") is not None for p in (row.positions or []))
+                if all(p.get("mark") is not None for p in _position_rows(row.positions))
                 else None,
                 "cash": _money(row.cash),
                 "gross_exposure": _money(row.gross_exposure)
-                if all(p.get("mark") is not None for p in (row.positions or []))
+                if all(p.get("mark") is not None for p in _position_rows(row.positions))
                 else None,
                 "reconciliation_status": row.reconciliation_status,
                 "as_of": _iso(row.ts),
@@ -208,7 +219,9 @@ def get_overview(session: Session, config: TradingConfig, run_id: str | None) ->
             .where(broker_orders.c.run_id == run.run_id)
         ).scalar_one(),
         "fills": session.execute(
-            select(func.count()).select_from(fills).where(fills.c.run_id == run.run_id)
+            select(func.count())
+            .select_from(fills)
+            .where(fills.c.run_id == run.run_id, fills.c.portfolio_key == STRATEGY_BOOK)
         ).scalar_one(),
     }
     instruments = get_instrument_quality(session, run.run_id)
@@ -274,7 +287,7 @@ def get_equity_curve(session: Session, config: TradingConfig, run_id: str | None
             "label": BOOK_LABELS.get(row.portfolio_key, row.portfolio_key),
             "ts": _iso(row.ts),
             "equity": _money(row.equity)
-            if not any(p.get("mark") is None for p in row.positions or [])
+            if not any(p.get("mark") is None for p in _position_rows(row.positions))
             else None,
             "cash": _money(row.cash),
         }
@@ -333,7 +346,7 @@ def get_activity(
     session: Session,
     config: TradingConfig,
     run_id: str | None,
-    cursor: str | None = None,
+    cursor: str | int | None = None,
     limit: int = 20,
 ) -> dict[str, Any]:
     limit = max(1, min(int(limit), 100))
@@ -425,7 +438,9 @@ def get_fills(
         return _envelope(
             session=session, config=config, run=None, as_of=None, payload={"fills": []}
         )
-    query = select(fills).where(fills.c.run_id == run.run_id)
+    query = select(fills).where(
+        fills.c.run_id == run.run_id, fills.c.portfolio_key == STRATEGY_BOOK
+    )
     if order_id is not None:
         query = query.where(fills.c.order_id == order_id)
     rows = session.execute(query.order_by(fills.c.ts)).all()
@@ -550,9 +565,11 @@ def get_order_detail(
             if fill["side"] == side and fill["quantity"] is not None and fill["price"] is not None
         ]
         if parts:
-            total_qty = sum(qty for qty, _ in parts)
+            total_qty = sum((qty for qty, _ in parts), Decimal(0))
             if total_qty > 0:
-                vwap[side] = str(round_money(sum(qty * price for qty, price in parts) / total_qty))
+                vwap[side] = str(
+                    round_money(sum((qty * price for qty, price in parts), Decimal(0)) / total_qty)
+                )
     reservation_rows = session.execute(
         select(reservations).where(
             reservations.c.run_id == run.run_id,
@@ -687,7 +704,7 @@ def get_positions(session: Session, config: TradingConfig, run_id: str | None) -
             payload={"positions": [], "cash": None},
         )
     positions = []
-    for raw in row.positions or []:
+    for raw in _position_rows(row.positions):
         quantity = Decimal(str(raw.get("quantity", "0")))
         if quantity <= 0:
             continue
@@ -728,11 +745,14 @@ def get_instrument_quality(session: Session, run_id: str) -> list[dict[str, Any]
     """Per-instrument truth: latest bar, session gap, derived quality flag."""
     out: list[dict[str, Any]] = []
     watermark = _run_watermark(session, run_id)
-    for instrument_id in session.execute(
-        select(instruments.c.instrument_id)
-        .where(instruments.c.run_id == run_id)
-        .order_by(instruments.c.instrument_id)
-    ).scalars():
+    instrument_ids: list[str] = list(
+        session.execute(
+            select(instruments.c.instrument_id)
+            .where(instruments.c.run_id == run_id)
+            .order_by(instruments.c.instrument_id)
+        ).scalars()
+    )
+    for instrument_id in instrument_ids:
         latest = session.execute(
             select(
                 market_bars.c.ts,
@@ -853,15 +873,14 @@ def get_prices(
         ).all()
     ]
     present = {row["ts"] for row in bars if row["ts"] is not None}
-    all_ticks = [
-        stamp
-        for stamp in session.execute(
+    all_ticks: list[datetime] = list(
+        session.execute(
             select(market_bars.c.ts)
             .where(market_bars.c.run_id == run.run_id)
             .distinct()
             .order_by(market_bars.c.ts)
         ).scalars()
-    ]
+    )
     missing_ticks = [
         iso
         for iso in (_iso(stamp) for stamp in all_ticks)
@@ -929,7 +948,7 @@ def get_prices(
         for label, kind, ts, ref, _ in (marker_rows + order_markers + fill_markers)
         if ts is not None
     ]
-    markers.sort(key=lambda item: item["ts"])
+    markers.sort(key=lambda item: str(item["ts"]))
     flags: list[str] = []
     if missing_ticks:
         flags.append("missing-data")

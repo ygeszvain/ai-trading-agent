@@ -1,0 +1,27 @@
+{
+  "observed_date": "2026-11-01",
+  "access": "Unauthenticated public metadata GET only; no account login/registration/tool request",
+  "resource_metadata_url": "https://agent.robinhood.com/.well-known/oauth-protected-resource/mcp/trading",
+  "authorization_server_metadata_url": "https://agent.robinhood.com/.well-known/oauth-authorization-server/mcp/trading",
+  "resource": "https://agent.robinhood.com/mcp/trading",
+  "profile": {
+    "issuer": "https://agent.robinhood.com/mcp/trading",
+    "authorization_endpoint": "https://robinhood.com/oauth",
+    "token_endpoint": "https://api.robinhood.com/oauth2/token/",
+    "registration_endpoint": "https://agent.robinhood.com/oauth/trading/register",
+    "scopes_supported": [
+      "internal"
+    ],
+    "code_challenge_methods_supported": [
+      "S256"
+    ],
+    "token_endpoint_auth_methods_supported": [
+      "none"
+    ],
+    "authorization_response_iss_parameter_supported": true
+  },
+  "profile_sha256": "845b0647275e1e59c4b96b974e875c897fd72ff51839e41ee52c7f2189af880e",
+  "read_only_scope_attested": false,
+  "actual_owner_authentication_tested": false,
+  "financial_authority": "LIVE_NOT_AUTHORIZED"
+}

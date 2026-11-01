@@ -146,7 +146,8 @@ class McpOAuthClient:
             return None
         try:
             record = json.loads(self._client_record_path.read_text())
-            return record.get("client_id")
+            client_id = record.get("client_id")
+            return client_id if isinstance(client_id, str) else None
         except (json.JSONDecodeError, OSError):
             return None
 
@@ -225,7 +226,7 @@ class McpOAuthClient:
             self._token_store_path, self._phrase
         ).load() or CredentialStore(self._token_store_path, self._phrase)._persist_after_refresh(
             response.json(),
-            self._client_id,  # type: ignore[attr-defined]
+            self._client_id,
         )
 
     def _ensure_valid_token(self) -> None:
@@ -361,7 +362,8 @@ class McpOAuthClient:
         query = dict(urllib.parse.parse_qsl(parsed.query))
         if query.get("state") != state:
             raise TokenStoreError(
-                f"OAuth state mismatch (expected {state[:8]}…, got {str(query.get('state'))[:8]}…); "
+                f"OAuth state mismatch (expected {state[:8]}…, got "
+                f"{str(query.get('state'))[:8]}…); "
                 "possible CSRF — no tokens stored"
             )
         code = query.get("code")

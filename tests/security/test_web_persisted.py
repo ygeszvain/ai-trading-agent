@@ -331,7 +331,7 @@ def test_material_persisted_views_scope_unknown_corrections_and_exact_values(web
         assert response.status_code == 200
         assert "script-src 'self'" in response.headers["content-security-policy"]
         assert response.headers["cache-control"] == "no-store"
-    assert client.get("/api/v1/stream").status_code == 404
+    assert client.get("/api/v1/stream").status_code == 422  # scoped cursor is now mandatory
     assert client.get("/api/v1/export.csv").status_code == 404
     with Session(engine) as session:
         after = {

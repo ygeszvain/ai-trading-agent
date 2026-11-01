@@ -1,9 +1,8 @@
-"""Owner-managed credential store for the broker gateway token.
+"""Legacy fixture credential store; the real gateway remains quarantined.
 
-The MCP access token is created by the owner in their own browser session
-with the broker (agent.robinhood.com) and pasted into the CLI during
-``trading-agent broker setup``. It then lives in exactly one file: a JSON
-document with 0600 permissions inside a 0700 directory.
+Do not paste broker tokens into a CLI or coding environment. The current
+owner-run official browser flow lives in ``owner_runtime.auth`` and requires a
+separate OS identity. This legacy store is retained for existing offline tests.
 
 Security invariants (build plan sections 6 and 20):
   * The token never appears in the database, logs, configuration, the
@@ -16,6 +15,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from ..contracts.broker import BrokerError
 from ..security.files import read_private_json, write_private_json
@@ -77,7 +77,7 @@ class TokenStore:
             ) from error
         return token or None
 
-    def load_meta(self) -> dict:
+    def load_meta(self) -> dict[str, Any]:
         """Metadata only (never the token) for status displays."""
         if not self.exists():
             return {"present": False}

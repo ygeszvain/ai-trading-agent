@@ -1,0 +1,35 @@
+{
+  "review_date": "2026-11-01",
+  "scope": "Synthetic software test fixtures only; no real investment evidence",
+  "preserved_test_source": "economic_tests_27ce0df.py.txt",
+  "preserved_source_sha256": "03bf2eedc91d2d3eb972da11300cf0d1ccdf6366b987c239fb1acab8d29632e7",
+  "protocol_digest_unchanged_from_27ce0df": "7b4627ce5895ac35fc3804e93c5d83ce",
+  "criteria_grid_holdouts_changed": false,
+  "legacy_regime_dataset_sha256": "696bfbb091708d429fb05d998a96afc1dc12a40636328f8ad08e205031cf1b29",
+  "legacy_periodic_dataset_sha256": "d7e8d3b5aeb254921abd77eadfa1aec0e8d96b30ce0ff6271e960182901f9102",
+  "original_failed_expectations": {
+    "regime_positive_fold_share": {
+      "expected": "0.8",
+      "observed": "1.000000"
+    },
+    "first_regime_fold_edge": {
+      "expected": "negative",
+      "observed_same_close_v1": "0.250493",
+      "observed_corrected_execution_v3": "0.185469"
+    },
+    "25_session_periodic_fixture": {
+      "expected": "reject",
+      "observed": "paper_test",
+      "corrected_v3_first_edge": "0.094430"
+    }
+  },
+  "fixture_semantic_correction": "Original whipsaw input has predictable alternating 25-session drift blocks. It is retained as periodic_trend_series_v1. The named whipsaw fixture v2 alternates drift every session, declared before evaluation, without parameter/threshold search.",
+  "new_daily_fixture_observation": {
+    "verdict": "reject",
+    "mean_fold_edge": "-0.114192",
+    "positive_fold_share": "0.000000"
+  },
+  "failed_evidence_retained": ".data/stabilization/evidence/evaluation-baseline.txt and eval-auth-causal-final.txt; old assertions archived and git 27ce0df retained",
+  "investment_evidence": "EXTERNAL_VALIDATION_PENDING",
+  "financial_authority": "LIVE_NOT_AUTHORIZED"
+}

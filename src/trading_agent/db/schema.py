@@ -40,6 +40,14 @@ ID = String(64)
 
 metadata = MetaData()
 
+executor_leases = Table(
+    "executor_leases",
+    metadata,
+    Column("scope", String(128), primary_key=True),
+    Column("owner_id", String(64), nullable=False),
+    Column("generation", BigInteger, nullable=False),
+)
+
 
 # ---------------------------------------------------------------- runs
 
@@ -234,6 +242,7 @@ fills = Table(
     metadata,
     Column("fill_id", ID, primary_key=True),
     Column("run_id", ID, nullable=False),
+    Column("portfolio_key", String(32), nullable=False, server_default="strategy"),
     Column("order_id", ID, nullable=False),
     Column("instrument_id", String(32), nullable=False),
     Column("side", String(8), nullable=False),
@@ -254,6 +263,7 @@ ledger_events = Table(
     metadata,
     Column("event_id", ID, primary_key=True),
     Column("event_key", ID, nullable=False, unique=True),
+    Column("application_seq", BigInteger, nullable=True),
     Column("run_id", ID, nullable=False),
     Column("portfolio_key", String(32), nullable=False),
     Column("ts", TS, nullable=False),
@@ -269,6 +279,9 @@ ledger_events = Table(
     Column("ref_id", ID, nullable=True),
     Column("fencing_token", BigInteger, nullable=False, server_default=text("0")),
     Column("note", Text, nullable=True),
+    UniqueConstraint(
+        "run_id", "portfolio_key", "application_seq", name="uq_ledger_application_seq"
+    ),
 )
 
 # ------------------------------------------------- portfolio_snapshots

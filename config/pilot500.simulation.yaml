@@ -1,0 +1,143 @@
+# Owner-reported USD 500; simulation only; no active financial authority.
+app:
+  environment: development
+  mode: simulation
+  display_timezone: America/Chicago
+  exchange_timezone: America/New_York
+  web_host: 127.0.0.1
+  web_port: 8000
+  db_url: postgresql+psycopg://trading_agent@127.0.0.1:5433/trading_agent
+llm:
+  provider: lmstudio
+  base_url: http://127.0.0.1:1234/v1
+  model_id: null
+  auth_token_secret_ref: null
+  allow_cloud_fallback: false
+  max_calls_per_research_job: 4
+  max_documents_per_job: 12
+  job_timeout_seconds: 120
+broker:
+  provider: simulator
+  robinhood_mcp_url: https://agent.robinhood.com/mcp/trading
+  approved_account_id: null
+  allowlisted_tool_schema_digest: null
+  shadow_enabled: false
+  shadow_provider: robinhood
+  shadow_poll_seconds: 30
+  account_number: null
+  token_store_path: .data/robinhood_mcp_token.json
+  capability_allowlist_path: .data/robinhood_tool_allowlist.json
+  request_timeout_seconds: 20
+live:
+  enabled: false
+  approved_capital_usd: '0'
+  owner_authorization_ref: null
+  authorization_expires_at: null
+  require_application_approval_per_intent: true
+  resume_after_restart: false
+paper:
+  initial_cash_usd: '500'
+  synthetic_fixture_universe:
+  - TEST_A
+  - TEST_B
+  - TEST_C
+universe:
+  live_instrument_allowlist: []
+  allow_short_sales: false
+  allow_margin_borrowing: false
+  allow_options: false
+  allow_crypto: false
+  allow_leveraged_or_inverse_funds: false
+  allow_extended_hours: false
+  allow_fractional_orders: false
+risk:
+  policy_version: paper-policy-v1
+  max_position_nav_fraction: '0.05'
+  max_gross_nav_fraction: '0.25'
+  max_positions: 5
+  max_order_nav_fraction: '0.02'
+  max_pending_entry_nav_fraction: '0.05'
+  min_cash_nav_fraction: '0.75'
+  max_planned_daily_turnover_nav_fraction: '0.10'
+  daily_loss_pause_nav_fraction: '0.01'
+  trailing_drawdown_pause_fraction: '0.05'
+  max_entry_spread_bps: '15'
+  max_quote_age_seconds: 5
+  max_account_state_age_seconds: 10
+  max_clock_offset_seconds: 1
+  max_participation_fraction: '0.001'
+  max_entry_orders_per_session: 10
+  entry_cancel_request_after_seconds: 60
+  default_order_type: limit
+  default_time_in_force: day
+  emergency_liquidation_enabled: false
+learning:
+  enabled: true
+  live_auto_promotion_enabled: false
+  max_challenger_trials_per_week: 20
+  allowed_live_change_classes: []
+  require_matured_labels: true
+costs:
+  paid_data_budget_usd_per_month: '0'
+  allow_paid_subscriptions: false
+  operating_cost_reporting_enabled: true
+data:
+  source: synthetic
+  fixture_seed: 20260504
+  start_session: '2026-05-04'
+  sessions: 128
+  stale_after_sessions: 1
+  missing_scenarios:
+  - instrument: TEST_B
+    from: '2026-08-10'
+    to: '2026-08-11'
+  scenarios:
+  - lost_ack
+  registry:
+  - id: synthetic
+    enabled: true
+  - id: fred
+    enabled: false
+    symbols:
+    - SP500
+    - IEX
+    - IEI
+    - IEF
+    - IEG
+    - IEH
+    asset_classes:
+    - global_equity
+    - us_bond
+    api_key_env: FRED_API_KEY
+    refresh:
+      max_age_minutes: 1440
+      backfill_sessions: 5
+strategy:
+  name: trend-momentum
+  version: momentum-v1
+  lookback_days: 20
+  entry_momentum: '0.05'
+  exit_momentum: '0.0'
+  target_weight: '0.05'
+  order_slice_weight: '0.02'
+research:
+  enabled: false
+  prompt_template: research-v1
+  evaluations_per_job: 2
+  max_response_chars: 8000
+  compare_with_strategy: true
+engine:
+  decision_offset_minutes: 30
+  commission_bps: '0'
+  spread_bps: '5'
+  cash_yield_annual: '0.045'
+  passive_basket:
+  - TEST_A
+  - TEST_B
+  - TEST_C
+backtest:
+  range_start: '2026-05-04'
+  range_end: '2026-11-30'
+  include_synthetic: true
+  initial_cash_usd: '500'
+  output_dir: reports/pilot500-feasibility

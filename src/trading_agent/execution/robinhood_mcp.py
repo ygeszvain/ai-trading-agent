@@ -105,6 +105,7 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
         self._config = config
         self._session = session
         self._broker_cfg = config.broker if config is not None else None
+        self._token_store: TokenStore | None
         if self._broker_cfg is not None and self._broker_cfg.shadow_enabled and http is not None:
             self._token_store = TokenStore(self._broker_cfg.token_store_path)
             self._token = self._token_store.load()
@@ -162,7 +163,9 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
             connected=connected,
             reads_enabled=connected and shadow_on,
             execution_enabled=False,
-            verified_capability_digest=(self._capability.digest if verified else None),
+            verified_capability_digest=(
+                self._capability.digest if self._capability and verified else None
+            ),
             notes=tuple(notes),
         )
 
@@ -224,7 +227,7 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
         self._capability = capability
         self._log_event(
             "capability_verified" if capability.verified else "capability_mismatch",
-            capability.mismatch_detail or f"digest={capability.digest[:16]}",
+            capability.mismatch_detail or f"digest={(capability.digest or 'UNKNOWN')[:16]}",
             {"tool_count": len(capability.tools), "digest": capability.digest},
         )
         if not capability.verified:
@@ -357,6 +360,8 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
     # ------------------------------------------------------------- client
 
     def _open_client(self) -> McpClient:
+        if self._broker_cfg is None:
+            raise BrokerUnavailable("broker configuration unavailable")
         if self._allowlist is None:
             self._log_event(
                 "session_failed",
@@ -390,6 +395,8 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
         self, client: McpClient, role: str, event_prefix: str
     ) -> tuple[object, str | None]:
         """Call the mapped tool for a role. Returns (payload, error|None)."""
+        if self._allowlist is None:
+            raise BrokerUnavailable("verified tool allowlist unavailable")
         tool_name = self._allowlist.tool_name(role)
         if tool_name is None:
             self._log_event(
@@ -570,7 +577,7 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
         self._last_cycle_at = as_of.isoformat()
 
     def _log_event(
-        self, event_type: str, detail: str | None = None, payload: dict | None = None
+        self, event_type: str, detail: str | None = None, payload: dict[str, object] | None = None
     ) -> None:
         self._log_event_impl(event_type, detail, payload)
 
@@ -578,7 +585,9 @@ class RobinhoodMcpBrokerAdapter(BrokerAdapter):
         """Audit hook used by the shadow loop for unexpected exceptions."""
         self._log_event("cycle_error", detail)
 
-    def _log_event_impl(self, event_type: str, detail: str | None, payload: dict | None) -> None:
+    def _log_event_impl(
+        self, event_type: str, detail: str | None, payload: dict[str, object] | None
+    ) -> None:
         if self._session is None:
             return
         self._session.execute(

@@ -88,7 +88,8 @@ class EvalProtocol:
             violations.append("max_folds / max_grid_runs must be >= 1")
         if self.max_folds * self.grid_size() > self.max_grid_runs:
             violations.append(
-                    f"budget: max_folds*grid ({self.max_folds} x {self.grid_size()}) exceeds max_grid_runs {self.max_grid_runs}"
+                f"budget: max_folds*grid ({self.max_folds} x {self.grid_size()}) exceeds "
+                f"max_grid_runs {self.max_grid_runs}"
             )
         if self.min_sample_sessions < 10:
             violations.append("min_sample_sessions must be >= 10")
@@ -142,7 +143,9 @@ def standard_protocol() -> EvalProtocol:
     return EvalProtocol(
         protocol_version="1.0",
         hypothesis=(
-            f"A long-only, close-decided momentum rule retains a cost-adjusted edge versus buy-and-hold on the eligible instrument, measured on out-of-sample walk-forward folds."
+            "A long-only, close-decided momentum rule retains a cost-adjusted edge versus "
+            "buy-and-hold on the eligible instrument, measured on out-of-sample "
+            "walk-forward folds."
         ),
         strategy="momentum_v1",
         lookback_candidates=(10, 20, 40),

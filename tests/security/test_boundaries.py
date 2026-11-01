@@ -377,6 +377,8 @@ def test_cache_identity_cannot_read_outside_its_root(tmp_path):
 
 
 def test_equal_timestamp_cash_history_must_restore_in_application_order(review_engine):
+    from trading_agent.db.schema import ledger_events
+
     with Session(review_engine) as session:
         seed_run(session, "ambiguous")
         ledger = Ledger(
@@ -402,6 +404,23 @@ def test_equal_timestamp_cash_history_must_restore_in_application_order(review_e
         else:
             raise AssertionError("fixture ordering witness not found")
         ledger.flush()
+        session.commit()
+    with Session(review_engine) as session:
+        restored = Ledger(
+            session,
+            run_id="ambiguous",
+            portfolio_key="strategy",
+            account_alias="local-sim",
+            initial_cash=Decimal(1000),
+            initial_ts=NOW,
+        )
+        assert restored.cash == Decimal(1100)
+        # Unknown historical ties are still rejected; never infer a hash ordering.
+        session.execute(
+            ledger_events.update()
+            .where(ledger_events.c.run_id == "ambiguous")
+            .values(application_seq=None)
+        )
         session.commit()
     with (
         Session(review_engine) as session,

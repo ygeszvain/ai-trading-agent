@@ -737,7 +737,9 @@ class BacktestSettings(BaseModel):
     def _validate_range(cls, value: Any, info: ValidationInfo) -> date:
         if isinstance(value, str):
             return date.fromisoformat(value)
-        return value
+        if isinstance(value, date) and not isinstance(value, datetime):
+            return value
+        raise ValueError("range must be an ISO date")
 
     @field_validator("initial_cash_usd", mode="before")
     @classmethod

@@ -6,6 +6,11 @@ const TA = {
     const selected = new URLSearchParams(window.location.search).get("run_id");
     const scoped = new URL(path, window.location.origin);
     if (selected && !scoped.searchParams.has("run_id")) scoped.searchParams.set("run_id", selected);
+    const snapshotKey = {"/api/v1/overview":"overview", "/api/v1/health":"health",
+      "/api/v1/equity-curve":"equity_curve"}[scoped.pathname];
+    if (this.snapshot && snapshotKey && scoped.searchParams.get("run_id") === this.snapshot.run_id) {
+      return this.snapshot[snapshotKey];
+    }
     let res;
     try { res = await fetch(scoped, { headers: { Accept: "application/json" } }); }
     catch (error) { this.failure(); throw error; }
@@ -134,6 +139,34 @@ document.addEventListener("DOMContentLoaded", async () => {
   });
 
   if (page === "overview") {
+    try { TA.snapshot = await TA.api("/api/v1/bootstrap"); }
+    catch { TA.failure(); return; }
+    let updateInFlight = false;
+    const monitor = document.createElement("p");
+    monitor.setAttribute("role", "status");
+    monitor.textContent = "Persisted updates: bounded 5-second polling. Market freshness is separate.";
+    document.querySelector("main")?.append(monitor);
+    setInterval(async () => {
+      if (updateInFlight || document.hidden) return;
+      updateInFlight = true;
+      try {
+        const url = new URL("/api/v1/events", window.location.origin);
+        url.searchParams.set("run_id", TA.snapshot.run_id);
+        url.searchParams.set("cursor", TA.snapshot.cursor);
+        const res = await fetch(url, {headers:{Accept:"application/json"}});
+        if (res.status === 409) {
+          monitor.textContent = "History gap or expired cursor; resynchronizing snapshot.";
+          window.location.reload(); return;
+        }
+        if (res.status === 401) { window.location.replace("/auth/login"); return; }
+        if (!res.ok) throw new Error("persisted update unavailable");
+        const page = await res.json();
+        TA.snapshot.cursor = page.cursor;
+        if (page.events.length) window.location.reload();
+        else monitor.textContent = "Persisted updates connected. Heartbeats do not refresh market data.";
+      } catch { monitor.textContent = "Updates disconnected. Displayed financial history may be stale."; }
+      finally { updateInFlight = false; }
+    }, 5000);
     TA.api("/api/v1/health").then((env) => {
       document.querySelector("[data-health]").innerHTML =
         `<span class="muted">db:${env.payload.database} web:${env.payload.web} recon:${TA.esc(env.payload.last_reconciliation)}</span>`;

@@ -1,12 +1,14 @@
 # Local trading website — M0 contract
 
-**Current status — November 1:** core read pages and Learning exist; Prompt 10
-exercised their material persisted synthetic failure paths in an isolated fixture.
-See [security_readiness_review.md](security_readiness_review.md). Normal startup
-is blocked by migration/schema incompatibility. Full M5 pages, stream cursor/
-reconnect, exports, complete consistent bootstrap and owner controls remain
-unimplemented/unverified. The M0 contract below describes requirements, not an
-acceptance certificate. Browser reads do not authorize broker or model work.
+**Current status — November 1 offline stabilization:** normal migration and
+website startup now work. Scoped bootstrap/event/SSE cursors, gap resnapshot,
+stale/disconnect handling, bounded synthetic-only redacted exports and seven
+review projections are implemented. Desktop/narrow Playwright and persisted-data
+failure checks pass. These basic projections do not certify every rich M5 page,
+large-history performance or prospective operation. Owner controls stay denied.
+See the [current repair matrix](stabilization_and_auth_readiness.md); historical
+Prompt 10/11/12 observations below describe their earlier snapshots. Browser
+reads invoke no model inference, broker mutation or authority renewal.
 
 **Governing specs:** [Local Trading Website Spec](Local_Trading_Website_Spec.md)
 and build plan section 18.

@@ -74,11 +74,12 @@ class SplitPlan:
         seen: set[date] = set()
         ordered: list[date] = []
         for container in [*self.folds, self.holdout]:
-            split = container if isinstance(container, Split) else None
+            if container is None:
+                continue
             splits = (
-                (container.train, container.validation, container.test)
-                if split is None
-                else (split,)
+                (container,)
+                if isinstance(container, Split)
+                else (container.train, container.validation, container.test)
             )
             for part in splits:
                 if part is None:
@@ -156,7 +157,9 @@ def plan_splits(
         if isinstance(item, date):
             normalized.append(item)
         elif isinstance(item, dict) and "close" in item:
-            normalized.append(item["close"])  # type: ignore[assignment]
+            if not isinstance(item["close"], date):
+                raise LeakageError("session close timestamp must be a date")
+            normalized.append(item["close"])
         else:  # pragma: no cover - defensive
             raise LeakageError(f"unrecognizable session entry: {item!r}")
     if not normalized:
@@ -212,9 +215,11 @@ def plan_splits(
     if not folds:
         raise LeakageError(
             f"history too short for at least one fold "
-                f"(have {total} sessions; need warmup {settings.warmup_days} + train {settings.train_days}"
+            f"(have {total} sessions; need warmup {settings.warmup_days} + train "
+            f"{settings.train_days}"
             f"+ embargo/val {settings.embargo_days + settings.validation_days} "
-                f"+ embargo/test {settings.embargo_days + settings.test_days} + holdout {settings.holdout_days})"
+            f"+ embargo/test {settings.embargo_days + settings.test_days} + holdout "
+            f"{settings.holdout_days})"
         )
     return SplitPlan(
         folds=folds,
@@ -233,7 +238,8 @@ def _assert_disjoint(folds: list[Fold], holdout: Split | None) -> None:
             overlap = set(part.sessions) & set(holdout.sessions)
             if overlap:
                 raise LeakageError(
-                        f"fold {fold.fold_index} {part.name} window overlaps the holdout: {sorted(overlap)[:3]}"
+                    f"fold {fold.fold_index} {part.name} window overlaps the holdout: "
+                    f"{sorted(overlap)[:3]}"
                 )
 
 

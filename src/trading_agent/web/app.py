@@ -115,6 +115,10 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
             response = JSONResponse(
                 status_code=503, content={"error": "local database unavailable"}
             )
+        except ValueError:
+            response = JSONResponse(
+                status_code=503, content={"error": "persisted evidence unavailable"}
+            )
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["Content-Security-Policy"] = (
@@ -453,6 +457,112 @@ def build_app(config: TradingConfig, *, auth_store: AuthStore | None = None) -> 
         require_auth(request)
         return get_cash_ledger(session, config, run_id)
 
+    @app.get("/api/v1/bootstrap")
+    async def api_bootstrap(
+        request: Request, session: Session = SessionDep, run_id: str | None = None
+    ) -> dict[str, Any]:
+        from .review import bootstrap
+
+        require_auth(request)
+        try:
+            return bootstrap(session, config, run_id, store.session_secret)
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail="scoped snapshot unavailable") from error
+
+    @app.get("/api/v1/events")
+    async def api_events(
+        request: Request, run_id: str, cursor: str, session: Session = SessionDep
+    ) -> Response:
+        from .review import notifications
+
+        require_auth(request)
+        try:
+            return JSONResponse(
+                notifications(session, config, run_id, cursor, store.session_secret)
+            )
+        except ValueError:
+            return JSONResponse(status_code=409, content={"resnapshot_required": True})
+
+    @app.get("/api/v1/stream")
+    async def api_stream(
+        request: Request, run_id: str, cursor: str, session: Session = SessionDep
+    ) -> Response:
+        import json
+
+        from .review import notifications
+
+        require_auth(request)
+        try:
+            page = notifications(
+                session,
+                config,
+                run_id,
+                request.headers.get("Last-Event-ID") or cursor,
+                store.session_secret,
+            )
+        except ValueError:
+            return JSONResponse(status_code=409, content={"resnapshot_required": True})
+        body = (
+            "retry: 5000\nid: "
+            + page["cursor"]
+            + "\nevent: committed\ndata: "
+            + json.dumps(page)
+            + "\n\n"
+        )
+        return Response(body, media_type="text/event-stream", headers={"X-Accel-Buffering": "no"})
+
+    @app.get("/api/v1/exports/activity.csv")
+    async def api_export(
+        request: Request, run_id: str, cursor: str | None = None, session: Session = SessionDep
+    ) -> Response:
+        from .review import export_activity
+
+        require_auth(request)
+        try:
+            body, next_cursor, more = export_activity(
+                session, config, run_id, cursor, store.session_secret
+            )
+        except ValueError as error:
+            raise HTTPException(
+                status_code=403, detail="export scope or cursor unavailable"
+            ) from error
+        return Response(
+            body,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": 'attachment; filename="activity.csv"',
+                "X-Next-Cursor": next_cursor,
+                "X-Has-More": str(more).lower(),
+            },
+        )
+
+    @app.get("/api/v1/review/{section}")
+    async def api_review(
+        request: Request, section: str, session: Session = SessionDep, run_id: str | None = None
+    ) -> dict[str, Any]:
+        from .review import review
+
+        require_auth(request)
+        try:
+            return review(session, config, run_id, section)
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail="review section unavailable") from error
+
+    @app.get("/{section}", response_class=HTMLResponse)
+    async def page_review(
+        request: Request, section: str, session: Session = SessionDep, run_id: str | None = None
+    ) -> Response:
+        from .review import review
+
+        require_auth(request)
+        try:
+            view = review(session, config, run_id, section)
+        except ValueError as error:
+            raise HTTPException(status_code=404, detail="review section unavailable") from error
+        return templates.TemplateResponse(
+            request=request, name="review.html", context={**base_ctx, "view": view}
+        )
+
     return app
 
 
@@ -507,4 +617,3 @@ def serve(config: TradingConfig, host: str | None = None, port: int | None = Non
         )
         raise SystemExit(1)
     uvicorn.run(app, host=config.app.web_host, port=config.app.web_port, log_level="warning")
-    return 0

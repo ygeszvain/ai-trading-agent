@@ -163,18 +163,21 @@ def _book_last_snapshot(session: Session, run_id: str, book: str) -> dict[str, A
     ).first()
     if row is None:
         return None
-    return {"equity": row.equity, "cash": row.cash, "positions": row.positions, "ts": row.ts}
+    positions = json.loads(row.positions) if isinstance(row.positions, str) else row.positions
+    return {"equity": row.equity, "cash": row.cash, "positions": positions, "ts": row.ts}
 
 
 def _session_gap(session: Session, run_id: str, instrument_id: str) -> int:
     """Largest gap, in calendar days, between consecutive observed bar days."""
-    stamps = session.execute(
-        select(func.date_trunc("day", market_bars.c.exchange_time)).where(
-            market_bars.c.run_id == run_id,
-            market_bars.c.instrument_id == instrument_id,
-            market_bars.c.exchange_time.is_not(None),
-        )
-    ).scalars()
+    stamps: list[datetime | None] = list(
+        session.execute(
+            select(func.date_trunc("day", market_bars.c.exchange_time)).where(
+                market_bars.c.run_id == run_id,
+                market_bars.c.instrument_id == instrument_id,
+                market_bars.c.exchange_time.is_not(None),
+            )
+        ).scalars()
+    )
     days = sorted({stamp for stamp in stamps if stamp is not None})
     if len(days) < 2:
         return 0
@@ -183,13 +186,15 @@ def _session_gap(session: Session, run_id: str, instrument_id: str) -> int:
 
 def _final_marks(session: Session, run_id: str) -> dict[str, dict[str, str | None]]:
     """Latest persisted bar per instrument; staleness judged at the run end."""
-    rows = session.execute(
-        select(market_bars.c.instrument_id, market_bars.c.ts, market_bars.c.close)
-        .where(market_bars.c.run_id == run_id)
-        .distinct(market_bars.c.instrument_id)
-        .order_by(market_bars.c.instrument_id, market_bars.c.ts.desc())
-    ).all()
-    watermark = session.execute(
+    rows: list[Any] = list(
+        session.execute(
+            select(market_bars.c.instrument_id, market_bars.c.ts, market_bars.c.close)
+            .where(market_bars.c.run_id == run_id)
+            .distinct(market_bars.c.instrument_id)
+            .order_by(market_bars.c.instrument_id, market_bars.c.ts.desc())
+        ).all()
+    )
+    watermark: datetime | None = session.execute(
         select(func.max(market_bars.c.ts)).where(market_bars.c.run_id == run_id)
     ).scalar_one()
     marks: dict[str, dict[str, str | None]] = {}
@@ -214,7 +219,7 @@ def _rederive_realized_pnl(session: Session, run_id: str, portfolio_key: str) ->
                 ledger_events.c.portfolio_key == portfolio_key,
                 ledger_events.c.kind == "fill",
             )
-            .order_by(ledger_events.c.ts, ledger_events.c.event_id)
+            .order_by(ledger_events.c.application_seq, ledger_events.c.ts, ledger_events.c.event_id)
         )
     ).all()
     sides: dict[str, str] = dict(
@@ -290,8 +295,10 @@ def build_report(session: Session, config: TradingConfig, run_id: str) -> Report
             market_bars.c.run_id == run_id
         )
     ).first()
-    fees = session.execute(
-        select(func.sum(fills.c.fee)).where(fills.c.run_id == run_id)
+    fees: Decimal | None = session.execute(
+        select(func.sum(fills.c.fee)).where(
+            fills.c.run_id == run_id, fills.c.portfolio_key == STRATEGY_BOOK
+        )
     ).scalar_one()
 
     return ReportData(
@@ -335,7 +342,7 @@ def build_report(session: Session, config: TradingConfig, run_id: str) -> Report
             order_events.c.to_status == "acknowledged",
             order_events.c.reason.like("reconciliation%"),
         ),
-        fills=_count(session, fills, run_id),
+        fills=_count(session, fills, run_id, fills.c.portfolio_key == STRATEGY_BOOK),
         total_fees=round_money(fees or Decimal("0")),
         equity=equity,
         realized_pnl=_rederive_realized_pnl(session, run_id, STRATEGY_BOOK),
@@ -343,7 +350,7 @@ def build_report(session: Session, config: TradingConfig, run_id: str) -> Report
         final_marks=_final_marks(session, run_id),
         data_gaps={key: value for key, value in gaps.items() if value > 0},
         last_reconciliation=last_status_row[0] if last_status_row is not None else "unverified",
-        reconciliation_sessions=sum(count for _, count in recon),
+        reconciliation_sessions=sum(int(str(count)) for _, count in recon),
         first_bar_at=bar_range[0] if bar_range else None,
         last_bar_at=bar_range[1] if bar_range else None,
         authority=config.authority(),

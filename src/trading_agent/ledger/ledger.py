@@ -20,7 +20,7 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..contracts.market import QualityFlag
@@ -64,10 +64,14 @@ class Ledger:
         self._positions: dict[str, _PositionState] = {}
         self._applied: set[str] = set()
         self._pending: list[dict[str, Any]] = []
+        self._pending_fills: dict[str, Fill] = {}
         self._dirty = False
         self._failed = False
         self._persisted_keys: set[str] = set()
         self._raw_fills: dict[str, tuple[str, str, Decimal, Decimal, Decimal]] = {}
+        self._cash_flows: dict[
+            tuple[str, str | None, str | None, datetime, str | None], Decimal
+        ] = {}
         self._initial_ts = initial_ts
         if not self._load_from_db():
             self._cash = Decimal("0")
@@ -233,6 +237,7 @@ class Ledger:
         )
         self._pending[-1]["cash_after"] = self.cash
         self._pending[-1]["position_after"] = state.quantity
+        self._pending_fills[fill.fill_id] = fill
         self._dirty = True
         return True
 
@@ -250,6 +255,13 @@ class Ledger:
         """Apply a cash movement (accrual, deposit, fee) exactly once."""
         if self._failed:
             raise LedgerInvariantError("ledger failed; rollback and reconstruct before reuse")
+        identity = (kind, ref_type, ref_id, ts, instrument_id)
+        if identity in self._cash_flows:
+            if self._cash_flows[identity] != round_money(amount):
+                raise LedgerInvariantError(
+                    "conflicting cash-flow reference requires correction review"
+                )
+            return False
         ref = f"{ref_type or kind}:{ref_id or kind}:{ts.isoformat()}"
         key = self._event_key(kind, ref)
         if key in self._applied or not self._db_key_absent(key):
@@ -259,6 +271,7 @@ class Ledger:
         if not proposed.is_finite() or proposed < 0:
             raise LedgerInvariantError("cash flow would make cash negative or nonfinite")
         self._cash = proposed
+        self._cash_flows[identity] = round_money(amount)
         self._applied.add(key)
         self._pending.append(
             self._row(
@@ -292,11 +305,13 @@ class Ledger:
         try:
             if (
                 self._session.execute(
-                    select(runs.c.run_id).where(runs.c.run_id == self._run_id).with_for_update()
-                ).first()
-                is None
+                    select(runs.c.fencing_token)
+                    .where(runs.c.run_id == self._run_id)
+                    .with_for_update()
+                ).scalar_one_or_none()
+                != self._fencing_token
             ):
-                raise LedgerInvariantError("ledger run is not persisted")
+                raise LedgerInvariantError("ledger run missing or executor fencing token changed")
             current: set[str] = set(
                 self._session.execute(
                     select(ledger_events.c.event_key).where(
@@ -307,7 +322,68 @@ class Ledger:
             )
             if current != self._persisted_keys:
                 raise LedgerInvariantError("concurrent ledger update; rollback and reconstruct")
+            for fill in self._pending_fills.values():
+                prior = self._session.execute(
+                    select(fills).where(
+                        fills.c.run_id == self._run_id,
+                        fills.c.raw_fill_id == fill.raw_fill_id,
+                    )
+                ).first()
+                values = {
+                    "portfolio_key": self._portfolio_key,
+                    "fill_id": fill.fill_id,
+                    "run_id": fill.run_id,
+                    "order_id": fill.order_id,
+                    "instrument_id": fill.instrument_id,
+                    "side": fill.side.value,
+                    "ts": fill.ts,
+                    "quantity": fill.quantity,
+                    "price": fill.price,
+                    "fee": fill.fee,
+                    "raw_fill_id": fill.raw_fill_id,
+                    "source": fill.source,
+                    "corrected_by": fill.corrected_by,
+                }
+                if prior is None:
+                    self._session.execute(fills.insert().values(**values))
+                elif any(
+                    getattr(prior, field) != values[field]
+                    for field in (
+                        "fill_id",
+                        "order_id",
+                        "instrument_id",
+                        "side",
+                        "quantity",
+                        "price",
+                        "fee",
+                    )
+                ):
+                    raise LedgerInvariantError(
+                        "persisted fill evidence conflicts with ledger input"
+                    )
+            unsequenced = self._session.execute(
+                select(func.count())
+                .select_from(ledger_events)
+                .where(
+                    ledger_events.c.run_id == self._run_id,
+                    ledger_events.c.portfolio_key == self._portfolio_key,
+                    ledger_events.c.application_seq.is_(None),
+                )
+            ).scalar_one()
+            if unsequenced:
+                raise LedgerInvariantError("legacy ledger ordering requires reviewed migration")
+            sequence = (
+                self._session.execute(
+                    select(func.max(ledger_events.c.application_seq)).where(
+                        ledger_events.c.run_id == self._run_id,
+                        ledger_events.c.portfolio_key == self._portfolio_key,
+                    )
+                ).scalar_one()
+                or 0
+            )
             for row in self._pending:
+                sequence += 1
+                row["application_seq"] = sequence
                 self._session.execute(ledger_events.insert().values(**row))
                 self._persisted_keys.add(row["event_key"])
                 inserted += 1
@@ -315,30 +391,46 @@ class Ledger:
             self._failed = True
             raise
         self._pending = []
+        self._pending_fills = {}
         self._dirty = False
         return inserted
 
     def _load_from_db(self) -> bool:
         """Rebuild the cache from persisted events (restart safety)."""
-        rows = self._session.execute(
-            select(ledger_events)
-            .where(
-                ledger_events.c.run_id == self._run_id,
-                ledger_events.c.portfolio_key == self._portfolio_key,
-            )
-            .order_by(ledger_events.c.ts, ledger_events.c.event_id)
-        ).all()
+        rows = list(
+            self._session.execute(
+                select(ledger_events)
+                .where(
+                    ledger_events.c.run_id == self._run_id,
+                    ledger_events.c.portfolio_key == self._portfolio_key,
+                )
+                .order_by(
+                    ledger_events.c.application_seq, ledger_events.c.ts, ledger_events.c.event_id
+                )
+            ).all()
+        )
         if not rows:
             return False
-        if len({row.ts for row in rows}) != len(rows):
+        if any(row.application_seq is None for row in rows) and len(
+            {row.ts for row in rows}
+        ) != len(rows):
             raise LedgerInvariantError(
                 "ambiguous equal-timestamp history requires reviewed durable ordering"
             )
+        if any(row.application_seq is None for row in rows):
+            rows.sort(key=lambda row: (row.ts, row.event_id))
         cash = Decimal("0")
         for row in rows:
             cash = row.cash_after if row.cash_after is not None else cash
             self._applied.add(row.event_key)
             self._persisted_keys.add(row.event_key)
+            if row.kind != "fill":
+                identity = (row.kind, row.ref_type, row.ref_id, row.ts, row.instrument_id)
+                if identity in self._cash_flows:
+                    raise LedgerInvariantError(
+                        "duplicate legacy cash-flow evidence requires review"
+                    )
+                self._cash_flows[identity] = row.amount or Decimal(0)
             if row.kind == "fill" and row.ref_id is not None:
                 record = self._session.execute(
                     select(fills).where(
@@ -419,10 +511,12 @@ class Ledger:
         return existing is None
 
     def _event_key(self, kind: str, *parts: str) -> str:
-        # Namespaced by portfolio key: each book is a separate account, so
-        # two books may legitimately carry the same movement reference.
+        # References repeat across simulation runs. Preserve old keys on disk;
+        # logical-reference replay above also deduplicates pre-v2 histories.
         return hashlib.sha256(
-            "|".join((self._portfolio_key, kind, *parts)).encode("utf-8")
+            "|".join((self._run_id, self._account_alias, self._portfolio_key, kind, *parts)).encode(
+                "utf-8"
+            )
         ).hexdigest()
 
     # ------------------------------------------------- reservation view

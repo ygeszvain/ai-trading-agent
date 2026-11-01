@@ -29,13 +29,13 @@ class SyntheticGateway(MarketDataGateway):
         return self._provider
 
     def instrument_ids(self) -> tuple[str, ...]:
-        return tuple(self._config.paper.synthetic_fixture_universe.split())
+        return tuple(self._config.paper.synthetic_fixture_universe)
 
     def instruments(self) -> tuple[Instrument, ...]:
         return tuple(self._instruments.values())
 
     def data_snapshot_id(self) -> str:
-        return self._provider.data_snapshot_id
+        return self._provider.data_snapshot_id()
 
     def sessions(self) -> tuple[date, ...]:
         return self._provider.sessions()
@@ -62,10 +62,6 @@ def build_gateway(config: TradingConfig) -> MarketDataGateway:
     """Construct the gateway selected by config (v1: always the fixture)."""
     from ..fixtures.synthetic import build_synthetic_market
 
-    market = build_synthetic_market(
-        config.paper.synthetic_fixture_seed,
-        config.paper.synthetic_fixture_sessions,
-        config.paper.synthetic_fixture_universe,
-    )
-    provider = SyntheticMarketProvider(market, exchange_timezone=config.paper.exchange_timezone)
+    market = build_synthetic_market(config)
+    provider = SyntheticMarketProvider(market, exchange_timezone=config.app.exchange_timezone)
     return SyntheticGateway(config, provider)

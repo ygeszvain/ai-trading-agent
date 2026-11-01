@@ -21,7 +21,7 @@ import urllib.request
 from dataclasses import dataclass, field
 from email.message import Message
 from http.client import HTTPResponse
-from typing import Any, IO, cast
+from typing import IO, Any, cast
 
 from ..config.models import LLMSettings
 from ..exceptions import TradingAgentError

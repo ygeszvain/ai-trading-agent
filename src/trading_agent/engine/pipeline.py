@@ -28,12 +28,13 @@ from __future__ import annotations
 
 import hashlib
 import json
+import uuid
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, text
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
@@ -58,6 +59,7 @@ from ..db.schema import (
     activity_events,
     broker_orders,
     decisions,
+    executor_leases,
     fills,
     instruments,
     ledger_events,
@@ -125,11 +127,16 @@ class TradingPipeline:
     """Runs the deterministic offline demo end-to-end against the local database."""
 
     def __init__(self, config: TradingConfig) -> None:
+        if config.app.mode.value != "simulation" or config.broker.provider != "simulator":
+            raise PipelineError("the synthetic pipeline requires simulation and simulator")
         self._config = config
         self._engine = create_app_engine(config)
         run_migrations(config)
         self._clock = ExchangeClock(config.app.exchange_timezone, ())
         self._market_cache: SyntheticMarket | None = None
+        self._owner_id = uuid.uuid4().hex
+        self._generation: int | None = None
+        self._lease_connection: Any = None
 
     # ------------------------------------------------------------- run id
 
@@ -149,6 +156,9 @@ class TradingPipeline:
         basis = json.dumps(
             {
                 "fixture": FIXTURE_MODEL_VERSION,
+                "pipeline_version": "durable-native-json-v2",
+                "strategy_settings": config.strategy.model_dump(mode="json"),
+                "risk_settings": config.risk.model_dump(mode="json"),
                 "snapshot": self._market().data_snapshot_id,
                 "universe": sorted(config.paper.synthetic_fixture_universe),
                 "strategy": config.strategy.version,
@@ -166,9 +176,47 @@ class TradingPipeline:
     # ----------------------------------------------------------------- run
 
     def run(self, *, reset: bool = False) -> RunResult:
+        scope = "simulation:" + ACCOUNT_ALIAS
+        lease_key = int.from_bytes(hashlib.sha256(scope.encode()).digest()[:8], signed=True)
+        with self._engine.connect() as conn:
+            if not conn.execute(
+                text("SELECT pg_try_advisory_lock(:key)"), {"key": lease_key}
+            ).scalar_one():
+                raise PipelineError("another simulation executor owns this account")
+            self._lease_connection = conn
+            try:
+                return self._run_locked(reset=reset)
+            finally:
+                self._generation = None
+                self._lease_connection = None
+                conn.execute(text("SELECT pg_advisory_unlock(:key)"), {"key": lease_key})
+
+    def _assert_lease(self, session: Session) -> None:
+        self._lease_connection.execute(text("SELECT 1"))
+        row = session.execute(
+            select(executor_leases)
+            .where(executor_leases.c.scope == "simulation:" + ACCOUNT_ALIAS)
+            .with_for_update()
+        ).one()
+        if row.owner_id != self._owner_id or row.generation != self._generation:
+            raise PipelineError("executor lease changed; new worker and reconciliation required")
+
+    def _run_locked(self, *, reset: bool = False) -> RunResult:
         run_id = self.run_id()
         session = open_session(self._engine)
         try:
+            statement = postgresql.insert(executor_leases).values(
+                scope="simulation:" + ACCOUNT_ALIAS, owner_id=self._owner_id, generation=1
+            )
+            self._generation = session.execute(
+                statement.on_conflict_do_update(
+                    index_elements=[executor_leases.c.scope],
+                    set_={
+                        "owner_id": self._owner_id,
+                        "generation": executor_leases.c.generation + 1,
+                    },
+                ).returning(executor_leases.c.generation)
+            ).scalar_one()
             status_row = session.execute(
                 select(runs.c.status).where(runs.c.run_id == run_id)
             ).first()
@@ -183,7 +231,9 @@ class TradingPipeline:
                 self._create_run(session, run_id)
             else:
                 session.execute(
-                    runs.update().where(runs.c.run_id == run_id).values(status="running")
+                    runs.update()
+                    .where(runs.c.run_id == run_id)
+                    .values(status="running", fencing_token=self._generation)
                 )
                 session.flush()
             result = self._execute(session, run_id, resumed=resumed)
@@ -229,6 +279,7 @@ class TradingPipeline:
                 data_snapshot_id=self._market().data_snapshot_id,
                 initial_cash=self._config.paper.initial_cash_usd,
                 status="running",
+                fencing_token=self._generation,
                 created_at=first_tick,
             )
         )
@@ -243,7 +294,7 @@ class TradingPipeline:
                     quantity_precision=0,
                     is_synthetic=True,
                     eligible=True,
-                    notes=json.dumps([f"synthetic fixture instrument {instrument_id}"]),
+                    notes=[f"synthetic fixture instrument {instrument_id}"],
                 )
             )
 
@@ -291,6 +342,7 @@ class TradingPipeline:
                 account_alias=ACCOUNT_ALIAS,
                 initial_cash=config.paper.initial_cash_usd,
                 initial_ts=first_tick,
+                fencing_token=self._generation or 0,
             )
             for book in BOOKS
         }
@@ -315,6 +367,7 @@ class TradingPipeline:
         passive_purchased = self._passive_purchased(session, run_id) if resumed else False
 
         for session_date in market.sessions:
+            self._assert_lease(session)
             if self._session_done(session, run_id, session_date):
                 completed_equity = self._session_equity_at(session, run_id, session_date)
                 if completed_equity is not None:
@@ -566,7 +619,7 @@ class TradingPipeline:
                 model_version=decision.model_version,
                 data_snapshot_id=decision.data_snapshot_id,
                 rationale=decision.rationale,
-                invalidation=json.dumps(list(decision.invalidation_conditions)),
+                invalidation=list(decision.invalidation_conditions),
                 risk_policy_version=decision.risk_policy_version,
             )
         )
@@ -722,8 +775,8 @@ class TradingPipeline:
                 policy_version=worst_evaluation.policy_version,
                 evaluated_at=decision_ts,
                 outcome=worst_evaluation.outcome.value,
-                reasons=json.dumps(aggregated_reasons),
-                limits=json.dumps(worst_evaluation.limits),
+                reasons=aggregated_reasons,
+                limits=worst_evaluation.limits,
             )
         )
         self._emit(
@@ -785,7 +838,7 @@ class TradingPipeline:
                 status=ReservationStatus.ACTIVE.value,
                 reserved_at=at,
                 resolved_at=None,
-                fencing_token=0,
+                fencing_token=self._generation,
             )
         )
 
@@ -1126,7 +1179,7 @@ class TradingPipeline:
             payload={
                 "status": recon.status,
                 "session": session_date.isoformat(),
-                "differences": json.dumps(recon.differences),
+                "differences": recon.differences,
             },
         )
 
@@ -1226,7 +1279,7 @@ class TradingPipeline:
                 equity=snapshot.equity,
                 cash=snapshot.cash,
                 gross_exposure=snapshot.gross_exposure,
-                positions=json.dumps(positions),
+                positions=positions,
                 reconciliation_status=snapshot.reconciliation_status,
             )
         )
@@ -1268,7 +1321,7 @@ class TradingPipeline:
         origin: EventOrigin,
         event_type: str,
         correlation: dict[str, str],
-        payload: dict[str, str],
+        payload: dict[str, Any],
     ) -> int:
         cursor = self._next_cursor(session, run_id)
         event_id = f"evt-{run_id}-{cursor}"
@@ -1282,8 +1335,8 @@ class TradingPipeline:
                 ts=ts,
                 origin=origin.value,
                 event_type=event_type,
-                correlation=json.dumps(correlation),
-                payload=json.dumps(payload),
+                correlation=correlation,
+                payload=payload,
             )
         )
         return cursor + 1
@@ -1334,7 +1387,9 @@ class TradingPipeline:
             select(func.count()).select_from(broker_orders).where(broker_orders.c.run_id == run_id)
         ).scalar_one()
         result.fills = session.execute(
-            select(func.count()).select_from(fills).where(fills.c.run_id == run_id)
+            select(func.count())
+            .select_from(fills)
+            .where(fills.c.run_id == run_id, fills.c.portfolio_key == STRATEGY_BOOK)
         ).scalar_one()
         # Orders that *ever reached* partially_filled (they end filled/
         # cancelled/expired, so the terminal status alone always reads 0).
@@ -1372,4 +1427,20 @@ class TradingPipeline:
             .limit(1)
         ).first()
         result.reconciliation = recon[0] if recon is not None else "unverified"
+        snapshot = session.execute(
+            select(portfolio_snapshots.c.positions)
+            .where(
+                portfolio_snapshots.c.run_id == run_id,
+                portfolio_snapshots.c.portfolio_key == STRATEGY_BOOK,
+            )
+            .order_by(portfolio_snapshots.c.ts.desc())
+            .limit(1)
+        ).scalar_one_or_none()
+        positions: list[dict[str, Any]] = (
+            json.loads(snapshot) if isinstance(snapshot, str) else snapshot or []
+        )
+        for position in positions or []:
+            quantity = Decimal(str(position["quantity"]))
+            if quantity > 0:
+                result.positions["position_" + position["instrument_id"]] = quantity
         return result

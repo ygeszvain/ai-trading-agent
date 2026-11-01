@@ -17,7 +17,6 @@ Statuses:
 from __future__ import annotations
 
 import hashlib
-import json
 from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
@@ -98,7 +97,7 @@ class ReconciliationService:
                 run_id=self._run_id,
                 session_date=at.date().isoformat(),
                 status=status,
-                differences=json.dumps(differences),
+                differences=differences,
                 started_at=at,
                 completed_at=at,
             )

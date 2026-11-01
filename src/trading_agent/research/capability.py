@@ -1,24 +1,24 @@
-"""Capability probing for advisory research (plan section 8, v1 advisory scope).
+"""Four fixed numerical research probes, persisted against the actual M2 schema.
 
-The probe runs a fixed, deterministic task set — a documented momentum signal
-over synthetic fixture closes, graded against golden values — and persists a
-capability record on the research_jobs table. Advisory research is GATED on
-this record: capability < 0.7 means the model stays advisory-only (no weight
-proposals), per the plan's capability gate.
+This score describes only the synthetic tasks. It never grants strategy/weight,
+execution or live authority. Missing/failed tasks count against the full budget.
 """
 
 from __future__ import annotations
 
+import hashlib
 import json
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ..config.models import TradingConfig
 from ..data import SyntheticMarketProvider
-from ..db.schema import research_jobs
-from .jobs import _digest
-from .model_client import LocalModelClient
+from ..db.schema import research_evaluations, research_jobs
+from .jobs import AdvisoryClient, _digest
+from .model_client import ModelClientError
 
 GOLDEN_THRESHOLD = 0.7
 PROBE_TASKS = 4
@@ -27,106 +27,131 @@ WARMUP = 5
 
 
 def _golden_momentum(prices: list[float]) -> int:
-    """Documented probe rule: sign of the 10-session return.
-
-    +1 if the close rose at least 1% over the lookback, -1 if it fell at
-    least 1%, else 0 (hold). Fewer than WARMUP closes means no signal.
-    """
-    if len(prices) < WARMUP or len(prices) < LOOKBACK + 1:
+    if len(prices) < max(WARMUP, LOOKBACK + 1) or prices[-LOOKBACK - 1] <= 0:
         return 0
-    ref = prices[-LOOKBACK - 1]
-    if ref <= 0:
-        return 0
-    change = prices[-1] / ref - 1
-    if change > 0.01:
-        return 1
-    if change < -0.01:
-        return -1
-    return 0
+    change = prices[-1] / prices[-LOOKBACK - 1] - 1
+    return 1 if change > 0.01 else (-1 if change < -0.01 else 0)
 
 
 def probe(
-    client: LocalModelClient,
+    client: AdvisoryClient,
     provider: SyntheticMarketProvider,
-    config,
+    config: TradingConfig,
     session: Session,
     run_id: str,
-) -> dict:
-    """Run the probe task set, persist the job record, return the summary."""
-    job_id = "rj-" + _digest(run_id, "probe", "v1")[:20]
-    instruments = json.loads(config.paper.synthetic_fixture_universe)
-    sessions = provider.sessions()
-
-    # Idempotent: a completed probe for this run is reused.
-    existing = session.execute(
-        select(research_jobs.c.capability).where(research_jobs.c.job_id == job_id)
-    ).first()
-    if existing is not None and existing[0] is not None:
+) -> dict[str, object]:
+    job_id = (
+        "rj-"
+        + _digest(run_id, "probe-v2", client.model or "unknown", provider.data_snapshot_id())[:20]
+    )
+    existing: list[Any] = list(
+        session.execute(
+            select(research_evaluations.c.sanitized_response).where(
+                research_evaluations.c.job_id == job_id
+            )
+        )
+        .scalars()
+        .all()
+    )
+    if existing:
+        records = [json.loads(r) if isinstance(r, str) else r for r in existing]
+        correct = sum(bool(r.get("correct")) for r in records)
         return {
             "job_id": job_id,
             "model": client.model,
-            "version": "v1",
-            "capability": float(existing[0]),
-            "gated_advisory_only": float(existing[0]) < GOLDEN_THRESHOLD,
+            "version": "probe-v2",
+            "capability": correct / PROBE_TASKS,
+            "gated_advisory_only": True,
             "reused": True,
         }
-
-    attempted = 0
-    correct = 0
-    for offset in range(PROBE_TASKS):
-        instrument_id = sorted(instruments)[offset % len(instruments)]
-        as_of_session = sessions[max(0, len(sessions) - 1 - offset)]
-        closes = provider.recent_session_closes(instrument_id, as_of_session, LOOKBACK + 1)
-        if len(closes) < LOOKBACK + 1:
-            continue
-        prices = [float(c.close) for c in closes]
-        golden = _golden_momentum(prices)
-        expect = {1: "long", -1: "short", 0: "hold"}[golden]
-        prompt = (
-            f"Closing prices, oldest to newest, {as_of_session.isoformat()} session: "
-            f"{', '.join(_preprices(prices))}\n"
-            f"Instrument: {instrument_id}\n"
-            "Rule: compare the newest price to the price 10 sessions earlier. "
-            "Answer exactly one word: long if it rose more than 1%, short if it "
-            "fell more than 1%, otherwise hold.\nAnswer:"
-        )
-        system = "You answer quantitative questions with exactly one word."
-        try:
-            response = client.complete(system, prompt)
-        except Exception:
-            continue
-        attempted += 1
-        got = response.text.strip().lower().split()[0] if response.text.strip() else ""
-        if got == expect:
-            correct += 1
-
-    capability = correct / attempted if attempted else 0.0
+    days = provider.sessions()
+    if not days:
+        raise ValueError("capability probe requires a persisted synthetic data interval")
     now = datetime.now(UTC)
+    config_digest = hashlib.sha256(config.model_dump_json().encode()).hexdigest()
     session.execute(
         research_jobs.insert().values(
             job_id=job_id,
             run_id=run_id,
-            source_id="local_model",
+            session_date=days[-1],
+            source_id="capability_probe",
             model_id=client.model,
-            prompt_version="v1",
-            status="ok",
-            calls_made=client.calls_made,
-            tokens_used=client.tokens_used,
-            capability=capability,
+            prompt_version="probe-v2",
+            config_digest=config_digest,
+            status="running",
+            calls_made=0,
+            calls_budget=PROBE_TASKS,
+            evaluations_count=0,
+            created_at=now,
             started_at=now,
-            ended_at=now,
+        )
+    )
+    correct = attempted = 0
+    instruments = config.paper.synthetic_fixture_universe
+    for offset in range(PROBE_TASKS):
+        instrument = sorted(instruments)[offset % len(instruments)]
+        day = days[max(0, len(days) - 1 - offset)]
+        closes = provider.recent_session_closes(instrument, day, LOOKBACK + 1)
+        prices = [float(c.close) for c in closes]
+        expected = {1: "up", -1: "down", 0: "hold"}[_golden_momentum(prices)]
+        got = ""
+        if len(closes) >= LOOKBACK + 1:
+            attempted += 1
+            prompt = (
+                "Synthetic observations, oldest to newest: "
+                + ", ".join(f"{p:.4f}" for p in prices)
+                + ". Compare newest to the value 10 sessions ago: above +1% means up, "
+                "below -1% means down, otherwise hold. Return only up, down or hold."
+            )
+            try:
+                response = client.complete(
+                    "Numerical research probe only. No trading authority.", prompt, max_tokens=128
+                )
+                got = response.text.strip().lower()
+            except ModelClientError:
+                got = ""
+        passed = bool(got and got == expected)
+        correct += passed
+        session.execute(
+            research_evaluations.insert().values(
+                eval_id="re-" + _digest(job_id, str(offset))[:20],
+                job_id=job_id,
+                run_id=run_id,
+                session_date=day,
+                instrument_id=instrument,
+                data_snapshot_id=provider.data_snapshot_id(),
+                model_id=client.model,
+                prompt_version="probe-v2",
+                validation_status="valid" if passed else "invalid",
+                action=None,
+                weight=None,
+                sanitized_response={
+                    "task": offset,
+                    "expected": expected,
+                    "correct": passed,
+                    "scope": "synthetic_numerical_probe_only",
+                },
+                response_chars=0,
+                created_at=now,
+            )
+        )
+    score = correct / PROBE_TASKS
+    session.execute(
+        research_jobs.update()
+        .where(research_jobs.c.job_id == job_id)
+        .values(
+            status="probe_pass" if score >= GOLDEN_THRESHOLD else "probe_fail",
+            calls_made=attempted,
+            evaluations_count=PROBE_TASKS,
+            finished_at=datetime.now(UTC),
         )
     )
     session.commit()
     return {
         "job_id": job_id,
         "model": client.model,
-        "version": "v1",
-        "capability": capability,
-        "gated_advisory_only": capability < GOLDEN_THRESHOLD,
+        "version": "probe-v2",
+        "capability": score,
+        "gated_advisory_only": True,
         "reused": False,
     }
-
-
-def _preprices(prices: list[float]) -> list[str]:
-    return [f"{price:.4f}" for price in prices]

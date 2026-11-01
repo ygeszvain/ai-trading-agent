@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
+from typing import Any
 
 from .sanitization import sanitize_text
 
@@ -26,7 +27,7 @@ class EvaluatedOutput:
 
     output_status: str  # ok | invalid_output | model_error
     response_text: str | None  # sanitized
-    structured: dict | None
+    structured: dict[str, Any] | None
     error_class: str | None
     error_message: str | None
 

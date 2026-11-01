@@ -3,8 +3,9 @@
 {% block content %}
 <h1>Supervised pilot readiness — LIVE_NOT_AUTHORIZED</h1>
 <p>Read-only review. Actual live controls are unavailable. Software tests do not pass integration or investment evidence.</p>
+<p>The worksheet below preserves the earlier USD 1,000 draft and its historical blockers. The owner later reported USD 500 in an existing Agentic account; that balance-only preference remains unverified and inactive in <code>docs/pilot500_owner_request.unsigned.json</code>. Approved live capital remains USD 0. Current repair evidence is in <code>docs/stabilization_and_auth_readiness.md</code>.</p>
 <div class="cards">
-  <div class="card"><div class="k">Requested ceiling (inactive draft)</div><div class="v">USD {{ view.package.requested_capital_ceiling_usd }}</div></div>
+  <div class="card"><div class="k">Historical requested ceiling (inactive draft)</div><div class="v">USD {{ view.package.requested_capital_ceiling_usd }}</div></div>
   <div class="card"><div class="k">Runtime-approved capital</div><div class="v">USD {{ view.runtime.approved_capital_usd }}</div></div>
   <div class="card"><div class="k">Actual runtime mode</div><div class="v">{{ view.runtime.mode }}</div></div>
 </div>
@@ -12,7 +13,7 @@
 <h2>Unmet runtime prerequisites</h2>
 <ul>{% for name in view.unmet_runtime_prerequisites %}<li>{{ name }}</li>{% endfor %}</ul>
 <h2>Unsigned owner pilot review</h2>
-<p>Account, approved capital, universe, overnight policy, limits, duration, monitoring, observation and recovery remain unresolved. The requested USD 1,000 is not funding or consent.</p>
+<p>Account, approved capital, universe, overnight policy, limits, duration, monitoring, observation and recovery remain unresolved. The historical requested USD 1,000 is not funding or consent.</p>
 <fieldset disabled aria-label="Unavailable live controls">
   <legend>Actual live controls unavailable</legend>
   <button type="button">Approve intent</button><button type="button">Activate pilot</button><button type="button">Resume live</button>

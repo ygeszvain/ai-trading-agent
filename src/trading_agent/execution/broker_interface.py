@@ -25,6 +25,14 @@ class BrokerAdapter(abc.ABC):
 
     provider: str
 
+    def close(self) -> None:
+        """Release optional transport resources; unavailable adapters own none."""
+        return None
+
+    def log_cycle_error(self, detail: str) -> None:
+        """Optional classified read-gateway audit hook."""
+        return None
+
     @abc.abstractmethod
     def capabilities(self) -> BrokerCapabilities:
         """Sanitized capability report for this provider right now."""
